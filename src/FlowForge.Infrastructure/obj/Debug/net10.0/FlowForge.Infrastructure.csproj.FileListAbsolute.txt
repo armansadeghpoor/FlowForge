@@ -1,0 +1,17 @@
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Infrastructure.deps.json
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Infrastructure.dll
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Infrastructure.pdb
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Abstractions.dll
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Abstractions.pdb
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.csproj.AssemblyReference.cache
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.AssemblyInfoInputs.cache
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.AssemblyInfo.cs
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.csproj.CoreCompileInputs.cache
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForg.F9C55130.Up2Date
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.dll
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/refint/FlowForge.Infrastructure.dll
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/FlowForge.Infrastructure.pdb
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/obj/Debug/net10.0/ref/FlowForge.Infrastructure.dll
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Core.dll
+/Users/arman/Documents/Projects/dotNet/FlowForge/src/FlowForge.Infrastructure/bin/Debug/net10.0/FlowForge.Core.pdb
