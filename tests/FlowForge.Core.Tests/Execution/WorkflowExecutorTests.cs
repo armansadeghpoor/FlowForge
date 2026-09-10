@@ -5,6 +5,7 @@ using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Engine.Execution;
+using FlowForge.Infrastructure.State;
 
 namespace FlowForge.Core.Tests.Execution;
 
@@ -15,7 +16,8 @@ public sealed class WorkflowExecutorTests
     {
         var node = Node(1);
         var contexts = new ConcurrentQueue<NodeExecutionContext>();
-        var engine = CreateEngine(new FakeNodeRunner(
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
             "test",
             (context, _) =>
             {
@@ -24,6 +26,13 @@ public sealed class WorkflowExecutorTests
             }));
 
         var execution = await engine.ExecuteAsync(Workflow([node]), CancellationToken.None);
+        var storedExecution = await stateStore.GetExecutionAsync(
+            execution.Id,
+            CancellationToken.None);
+        var storedNode = await stateStore.GetNodeExecutionAsync(
+            execution.Id,
+            execution.Nodes[0].Id,
+            CancellationToken.None);
 
         var context = Assert.Single(contexts);
         var nodeState = Assert.Single(execution.Nodes);
@@ -33,6 +42,11 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(NodeExecutionStatus.Succeeded, nodeState.Status);
         Assert.NotNull(execution.StartedAt);
         Assert.NotNull(execution.CompletedAt);
+        Assert.NotNull(storedExecution);
+        Assert.Equal(WorkflowExecutionStatus.Succeeded, storedExecution.Status);
+        Assert.Equal(execution.CompletedAt, storedExecution.CompletedAt);
+        Assert.NotNull(storedNode);
+        Assert.Equal(NodeExecutionStatus.Succeeded, storedNode.Status);
     }
 
     [Fact]
@@ -42,7 +56,7 @@ public sealed class WorkflowExecutorTests
         var nodeB = Node(2);
         var nodeC = Node(3);
         var executionOrder = new ConcurrentQueue<NodeId>();
-        var engine = CreateEngine(new FakeNodeRunner(
+        var engine = CreateEngine(new InMemoryStateStore(), new FakeNodeRunner(
             "test",
             (context, _) =>
             {
@@ -72,7 +86,7 @@ public sealed class WorkflowExecutorTests
         var nodeCStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseParallelLayer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var nodeDInvocationCount = 0;
-        var engine = CreateEngine(new FakeNodeRunner(
+        var engine = CreateEngine(new InMemoryStateStore(), new FakeNodeRunner(
             "test",
             async (context, cancellationToken) =>
             {
@@ -125,15 +139,27 @@ public sealed class WorkflowExecutorTests
     public async Task ExecuteAsync_MissingNodeRunner_FailsWorkflow()
     {
         var node = Node(1, "missing");
-        var engine = CreateEngine();
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore);
 
         var execution = await engine.ExecuteAsync(Workflow([node]), CancellationToken.None);
+        var storedExecution = await stateStore.GetExecutionAsync(
+            execution.Id,
+            CancellationToken.None);
+        var storedNode = await stateStore.GetNodeExecutionAsync(
+            execution.Id,
+            execution.Nodes[0].Id,
+            CancellationToken.None);
 
         var nodeState = Assert.Single(execution.Nodes);
         Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
         Assert.Equal(NodeExecutionStatus.Failed, nodeState.Status);
         Assert.Contains("missing", nodeState.ErrorMessage ?? string.Empty);
         Assert.NotNull(execution.CompletedAt);
+        Assert.NotNull(storedExecution);
+        Assert.Equal(WorkflowExecutionStatus.Failed, storedExecution.Status);
+        Assert.NotNull(storedNode);
+        Assert.Equal(NodeExecutionStatus.Failed, storedNode.Status);
     }
 
     [Fact]
@@ -142,7 +168,8 @@ public sealed class WorkflowExecutorTests
         var nodeA = Node(1);
         var nodeB = Node(2);
         var invocations = new ConcurrentQueue<NodeId>();
-        var engine = CreateEngine(new FakeNodeRunner(
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
             "test",
             (context, _) =>
             {
@@ -157,16 +184,29 @@ public sealed class WorkflowExecutorTests
             Edge(nodeA, nodeB));
 
         var execution = await engine.ExecuteAsync(workflow, CancellationToken.None);
+        var storedExecution = await stateStore.GetExecutionAsync(
+            execution.Id,
+            CancellationToken.None);
+        var storedNode = await stateStore.GetNodeExecutionAsync(
+            execution.Id,
+            execution.Nodes[0].Id,
+            CancellationToken.None);
 
         var nodeState = Assert.Single(execution.Nodes);
         Assert.Equal([nodeA.Id], invocations.ToArray());
         Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
         Assert.Equal(NodeExecutionStatus.Failed, nodeState.Status);
         Assert.Equal("Node failed.", nodeState.ErrorMessage);
+        Assert.NotNull(storedExecution);
+        Assert.Equal(WorkflowExecutionStatus.Failed, storedExecution.Status);
+        Assert.NotNull(storedNode);
+        Assert.Equal(NodeExecutionStatus.Failed, storedNode.Status);
     }
 
-    private static WorkflowEngine CreateEngine(params INodeRunner[] runners) =>
-        new(new WorkflowExecutor(new FakeNodeRunnerRegistry(runners)));
+    private static WorkflowEngine CreateEngine(
+        InMemoryStateStore stateStore,
+        params INodeRunner[] runners) =>
+        new(new WorkflowExecutor(new FakeNodeRunnerRegistry(runners), stateStore));
 
     private static NodeDefinition Node(int value, string type = "test") =>
         new()

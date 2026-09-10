@@ -1,4 +1,5 @@
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
@@ -13,15 +14,21 @@ namespace FlowForge.Engine.Execution;
 public sealed class WorkflowExecutor
 {
     private readonly INodeRunnerRegistry _nodeRunnerRegistry;
+    private readonly IStateStore _stateStore;
 
     /// <summary>
     /// Initializes a new workflow executor.
     /// </summary>
     /// <param name="nodeRunnerRegistry">The registry used to resolve node runners.</param>
-    public WorkflowExecutor(INodeRunnerRegistry nodeRunnerRegistry)
+    /// <param name="stateStore">The store used to persist execution state.</param>
+    public WorkflowExecutor(
+        INodeRunnerRegistry nodeRunnerRegistry,
+        IStateStore stateStore)
     {
         ArgumentNullException.ThrowIfNull(nodeRunnerRegistry);
+        ArgumentNullException.ThrowIfNull(stateStore);
         _nodeRunnerRegistry = nodeRunnerRegistry;
+        _stateStore = stateStore;
     }
 
     /// <summary>
@@ -57,6 +64,8 @@ public sealed class WorkflowExecutor
             CompletedAt = null,
             Nodes = Array.Empty<NodeExecutionState>()
         };
+        await _stateStore.CreateExecutionAsync(execution, cancellationToken);
+
         var nodesById = workflow.Nodes.ToDictionary(node => node.Id);
         var nodeStates = new List<NodeExecutionState>();
 
@@ -74,17 +83,19 @@ public sealed class WorkflowExecutor
 
             if (layerStates.Any(state => state.Status == NodeExecutionStatus.Failed))
             {
-                return Complete(
+                return await CompleteAsync(
                     execution,
                     WorkflowExecutionStatus.Failed,
-                    nodeStates);
+                    nodeStates,
+                    cancellationToken);
             }
         }
 
-        return Complete(
+        return await CompleteAsync(
             execution,
             WorkflowExecutionStatus.Succeeded,
-            nodeStates);
+            nodeStates,
+            cancellationToken);
     }
 
     private async Task<NodeExecutionState> ExecuteNodeAsync(
@@ -92,23 +103,39 @@ public sealed class WorkflowExecutor
         WorkflowExecutionId executionId,
         CancellationToken cancellationToken)
     {
-        var runner = _nodeRunnerRegistry.Get(node.Type);
+        var startedAt = DateTime.UtcNow;
+        var nodeExecution = new NodeExecutionState
+        {
+            Id = new NodeExecutionId(Guid.NewGuid()),
+            NodeId = node.Id,
+            Status = NodeExecutionStatus.Running,
+            RetryCount = 0,
+            StartedAt = startedAt,
+            CompletedAt = null,
+            ErrorMessage = null
+        };
+        await _stateStore.SaveNodeExecutionAsync(
+            executionId,
+            nodeExecution,
+            cancellationToken);
 
+        var runner = _nodeRunnerRegistry.Get(node.Type);
         if (runner is null)
         {
-            return new NodeExecutionState
+            var failedNodeExecution = nodeExecution with
             {
-                Id = new NodeExecutionId(Guid.NewGuid()),
-                NodeId = node.Id,
                 Status = NodeExecutionStatus.Failed,
-                RetryCount = 0,
-                StartedAt = null,
                 CompletedAt = DateTime.UtcNow,
                 ErrorMessage = $"No node runner is registered for node type '{node.Type}'."
             };
+            await _stateStore.SaveNodeExecutionAsync(
+                executionId,
+                failedNodeExecution,
+                cancellationToken);
+
+            return failedNodeExecution;
         }
 
-        var startedAt = DateTime.UtcNow;
         var result = await runner.ExecuteAsync(
             new NodeExecutionContext
             {
@@ -117,28 +144,41 @@ public sealed class WorkflowExecutor
             },
             cancellationToken);
 
-        return new NodeExecutionState
+        var completedNodeExecution = nodeExecution with
         {
-            Id = new NodeExecutionId(Guid.NewGuid()),
-            NodeId = node.Id,
             Status = result.Success
                 ? NodeExecutionStatus.Succeeded
                 : NodeExecutionStatus.Failed,
-            RetryCount = 0,
-            StartedAt = startedAt,
             CompletedAt = DateTime.UtcNow,
             ErrorMessage = result.Success ? null : result.ErrorMessage
         };
+        await _stateStore.SaveNodeExecutionAsync(
+            executionId,
+            completedNodeExecution,
+            cancellationToken);
+
+        return completedNodeExecution;
     }
 
-    private static WorkflowExecution Complete(
+    private async Task<WorkflowExecution> CompleteAsync(
         WorkflowExecution execution,
         WorkflowExecutionStatus status,
-        IEnumerable<NodeExecutionState> nodeStates) =>
-        execution with
+        IEnumerable<NodeExecutionState> nodeStates,
+        CancellationToken cancellationToken)
+    {
+        var completedAt = DateTime.UtcNow;
+        await _stateStore.UpdateWorkflowStatusAsync(
+            execution.Id,
+            status,
+            execution.StartedAt,
+            completedAt,
+            cancellationToken);
+
+        return execution with
         {
             Status = status,
-            CompletedAt = DateTime.UtcNow,
+            CompletedAt = completedAt,
             Nodes = Array.AsReadOnly(nodeStates.ToArray())
         };
+    }
 }
