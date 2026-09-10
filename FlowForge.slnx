@@ -9,5 +9,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FlowForge.Core.Tests/FlowForge.Core.Tests.csproj" />
+    <Project Path="tests/FlowForge.Infrastructure.Tests/FlowForge.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>
