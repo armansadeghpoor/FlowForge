@@ -1,3 +1,4 @@
+using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 
 namespace FlowForge.Core.Domain.Executions;
@@ -11,7 +12,13 @@ public sealed record WorkflowExecution
 
     public required WorkflowId WorkflowId { get; init; }
 
+    public required WorkflowExecutionStatus Status { get; init; }
+
     public required DateTime CreatedAt { get; init; }
+
+    public required DateTime? StartedAt { get; init; }
+
+    public required DateTime? CompletedAt { get; init; }
 
     public required IReadOnlyList<NodeExecutionState> Nodes { get; init; }
 }

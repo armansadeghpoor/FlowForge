@@ -1,5 +1,6 @@
 using FlowForge.Abstractions.Engine;
 using FlowForge.Core.Domain.Definitions;
+using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Graph;
@@ -12,7 +13,7 @@ namespace FlowForge.Engine.Execution;
 public sealed class WorkflowEngine : IWorkflowEngine
 {
     /// <inheritdoc />
-    public Task<WorkflowExecution> StartAsync(
+    public Task<WorkflowExecution> ExecuteAsync(
         WorkflowDefinition workflow,
         CancellationToken cancellationToken)
     {
@@ -32,7 +33,10 @@ public sealed class WorkflowEngine : IWorkflowEngine
         {
             Id = new WorkflowExecutionId(Guid.NewGuid()),
             WorkflowId = workflow.Id,
+            Status = WorkflowExecutionStatus.Pending,
             CreatedAt = DateTime.UtcNow,
+            StartedAt = null,
+            CompletedAt = null,
             Nodes = Array.Empty<NodeExecutionState>()
         };
 

@@ -4,17 +4,17 @@ using FlowForge.Core.Domain.Executions;
 namespace FlowForge.Abstractions.Engine;
 
 /// <summary>
-/// Defines the contract for starting workflow executions.
+/// Defines the contract for executing workflows.
 /// </summary>
 public interface IWorkflowEngine
 {
     /// <summary>
-    /// Starts an execution of the supplied workflow definition.
+    /// Executes the supplied workflow definition.
     /// </summary>
     /// <param name="workflow">The workflow definition to execute.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
-    /// <returns>The created workflow execution.</returns>
-    Task<WorkflowExecution> StartAsync(
+    /// <returns>The resulting workflow execution snapshot.</returns>
+    Task<WorkflowExecution> ExecuteAsync(
         WorkflowDefinition workflow,
         CancellationToken cancellationToken);
 }
