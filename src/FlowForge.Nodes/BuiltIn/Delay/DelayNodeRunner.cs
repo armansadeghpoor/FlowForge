@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
 
@@ -8,8 +9,27 @@ namespace FlowForge.Nodes.BuiltIn.Delay;
 /// </summary>
 public sealed class DelayNodeRunner : INodeRunner
 {
+    private static readonly NodeDescriptor DelayDescriptor = new()
+    {
+        Type = "delay",
+        Version = "1.0",
+        ConfigurationSchema = new ReadOnlyDictionary<string, NodePropertyDefinition>(
+            new Dictionary<string, NodePropertyDefinition>(StringComparer.Ordinal)
+            {
+                ["durationMs"] = new NodePropertyDefinition
+                {
+                    Name = "durationMs",
+                    Type = NodePropertyType.Integer,
+                    Required = true
+                }
+            })
+    };
+
     /// <inheritdoc />
-    public string NodeType => "delay";
+    public string NodeType => Descriptor.Type;
+
+    /// <inheritdoc />
+    public NodeDescriptor Descriptor => DelayDescriptor;
 
     /// <inheritdoc />
     public async Task<NodeExecutionResult> ExecuteAsync(

@@ -96,6 +96,13 @@ public sealed class NodeRunnerRegistryTests
     {
         public string NodeType { get; } = nodeType;
 
+        public NodeDescriptor Descriptor { get; } = new()
+        {
+            Type = nodeType,
+            Version = "1.0",
+            ConfigurationSchema = new Dictionary<string, NodePropertyDefinition>()
+        };
+
         public Task<NodeExecutionResult> ExecuteAsync(
             NodeExecutionContext context,
             CancellationToken cancellationToken) =>

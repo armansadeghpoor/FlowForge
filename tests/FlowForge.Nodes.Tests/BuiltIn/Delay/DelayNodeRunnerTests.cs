@@ -18,6 +18,23 @@ public sealed class DelayNodeRunnerTests
     }
 
     [Fact]
+    public void Descriptor_ExposesDelayTypeAndVersion()
+    {
+        Assert.Equal("delay", _runner.Descriptor.Type);
+        Assert.Equal("1.0", _runner.Descriptor.Version);
+    }
+
+    [Fact]
+    public void Descriptor_ContainsRequiredIntegerDurationSchema()
+    {
+        var property = Assert.Single(_runner.Descriptor.ConfigurationSchema).Value;
+
+        Assert.Equal("durationMs", property.Name);
+        Assert.Equal(NodePropertyType.Integer, property.Type);
+        Assert.True(property.Required);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ZeroDuration_Succeeds()
     {
         var result = await _runner.ExecuteAsync(ContextWithDuration(0), CancellationToken.None);

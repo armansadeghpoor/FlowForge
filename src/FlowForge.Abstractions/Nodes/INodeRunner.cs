@@ -11,6 +11,11 @@ public interface INodeRunner
     string NodeType { get; }
 
     /// <summary>
+    /// Gets the node descriptor.
+    /// </summary>
+    NodeDescriptor Descriptor { get; }
+
+    /// <summary>
     /// Executes a workflow node.
     /// </summary>
     /// <param name="context">The node execution context.</param>
