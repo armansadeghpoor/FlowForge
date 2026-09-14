@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\src\FlowForge.Abstractions\FlowForge.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\FlowForge.Engine\FlowForge.Engine.csproj" />
     <ProjectReference Include="..\..\src\FlowForge.Infrastructure\FlowForge.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\FlowForge.Nodes\FlowForge.Nodes.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

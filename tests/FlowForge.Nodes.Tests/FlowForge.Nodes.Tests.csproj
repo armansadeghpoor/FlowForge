@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FlowForge.Nodes\FlowForge.Nodes.csproj" />
     <ProjectReference Include="..\..\src\FlowForge.Abstractions\FlowForge.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\FlowForge.Core\FlowForge.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
