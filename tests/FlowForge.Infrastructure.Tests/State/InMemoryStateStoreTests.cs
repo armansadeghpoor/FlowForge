@@ -1,6 +1,7 @@
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Values;
 using FlowForge.Infrastructure.State;
 
 namespace FlowForge.Infrastructure.Tests.State;
@@ -89,6 +90,9 @@ public sealed class InMemoryStateStoreTests
         Assert.NotNull(retrieved);
         Assert.Equal(NodeExecutionStatus.Succeeded, retrieved.Status);
         Assert.NotNull(retrieved.CompletedAt);
+        Assert.NotNull(retrieved.Output);
+        Assert.Equal(nodeExecution.Output, retrieved.Output);
+        Assert.Equal("node output", retrieved.Output.Value);
         Assert.NotSame(nodeExecution, retrieved);
     }
 
@@ -138,7 +142,7 @@ public sealed class InMemoryStateStoreTests
             RetryCount = 0,
             StartedAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             CompletedAt = null,
-            Output = null,
+            Output = new NodeOutput { Value = "node output" },
             ErrorMessage = null
         };
 }

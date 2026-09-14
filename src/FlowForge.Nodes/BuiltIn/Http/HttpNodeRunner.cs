@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Nodes.BuiltIn.Http;
 
@@ -168,7 +169,7 @@ public sealed class HttpNodeRunner : INodeRunner
             return new NodeExecutionResult
             {
                 Success = false,
-                Output = output,
+                Output = new NodeOutput { Value = output },
                 ErrorMessage =
                     $"HTTP request failed with status code {(int)response.StatusCode} ({response.ReasonPhrase})."
             };
@@ -177,7 +178,7 @@ public sealed class HttpNodeRunner : INodeRunner
         return new NodeExecutionResult
         {
             Success = true,
-            Output = output,
+            Output = new NodeOutput { Value = output },
             ErrorMessage = null
         };
     }

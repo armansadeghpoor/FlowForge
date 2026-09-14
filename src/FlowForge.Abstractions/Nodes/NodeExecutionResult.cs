@@ -1,3 +1,5 @@
+using FlowForge.Core.Domain.Values;
+
 namespace FlowForge.Abstractions.Nodes;
 
 /// <summary>
@@ -13,7 +15,7 @@ public sealed record NodeExecutionResult
     /// <summary>
     /// Gets the optional output produced by node execution.
     /// </summary>
-    public required object? Output { get; init; }
+    public required NodeOutput? Output { get; init; }
 
     /// <summary>
     /// Gets the error message associated with a failed execution, if any.

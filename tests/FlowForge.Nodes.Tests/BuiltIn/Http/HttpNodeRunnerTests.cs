@@ -49,7 +49,7 @@ public sealed class HttpNodeRunnerTests
 
         Assert.True(result.Success);
         Assert.Null(result.ErrorMessage);
-        var output = Assert.IsType<HttpResponseOutput>(result.Output);
+        var output = Assert.IsType<HttpResponseOutput>(result.Output?.Value);
         Assert.Equal(200, output.StatusCode);
         Assert.Equal("response body", output.Body);
         Assert.Equal(["first", "second"], output.Headers["X-Result"]);
@@ -173,7 +173,7 @@ public sealed class HttpNodeRunnerTests
 
         Assert.False(result.Success);
         Assert.Contains("502", result.ErrorMessage ?? string.Empty);
-        var output = Assert.IsType<HttpResponseOutput>(result.Output);
+        var output = Assert.IsType<HttpResponseOutput>(result.Output?.Value);
         Assert.Equal(502, output.StatusCode);
         Assert.Equal("upstream failed", output.Body);
     }

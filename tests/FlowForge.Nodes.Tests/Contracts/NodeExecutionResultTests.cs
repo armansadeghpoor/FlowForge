@@ -1,4 +1,5 @@
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Nodes.Tests.Contracts;
 
@@ -11,12 +12,13 @@ public sealed class NodeExecutionResultTests
         var result = new NodeExecutionResult
         {
             Success = true,
-            Output = output,
+            Output = new NodeOutput { Value = output },
             ErrorMessage = null
         };
 
         Assert.True(result.Success);
-        Assert.Same(output, result.Output);
+        Assert.NotNull(result.Output);
+        Assert.Same(output, result.Output.Value);
         Assert.Null(result.ErrorMessage);
     }
 

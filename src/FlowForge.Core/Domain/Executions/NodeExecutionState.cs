@@ -1,5 +1,6 @@
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Core.Domain.Executions;
 
@@ -23,7 +24,7 @@ public sealed record NodeExecutionState
     /// <summary>
     /// Gets the optional output produced by the node execution.
     /// </summary>
-    public required object? Output { get; init; }
+    public required NodeOutput? Output { get; init; }
 
     public required string? ErrorMessage { get; init; }
 }

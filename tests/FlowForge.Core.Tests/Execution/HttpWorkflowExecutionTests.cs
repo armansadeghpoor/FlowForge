@@ -52,7 +52,7 @@ public sealed class HttpWorkflowExecutionTests
 
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
         Assert.Equal(NodeExecutionStatus.Succeeded, nodeExecution.Status);
-        var output = Assert.IsType<HttpResponseOutput>(nodeExecution.Output);
+        var output = Assert.IsType<HttpResponseOutput>(nodeExecution.Output?.Value);
         Assert.Equal(200, output.StatusCode);
         Assert.Equal("integration response", output.Body);
 
@@ -60,7 +60,8 @@ public sealed class HttpWorkflowExecutionTests
         Assert.Equal(WorkflowExecutionStatus.Succeeded, storedExecution.Status);
         Assert.NotNull(storedNodeExecution);
         Assert.Equal(NodeExecutionStatus.Succeeded, storedNodeExecution.Status);
-        var storedOutput = Assert.IsType<HttpResponseOutput>(storedNodeExecution.Output);
+        Assert.Equal(nodeExecution.Output, storedNodeExecution.Output);
+        var storedOutput = Assert.IsType<HttpResponseOutput>(storedNodeExecution.Output?.Value);
         Assert.Equal(output, storedOutput);
     }
 
