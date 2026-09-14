@@ -8,5 +8,6 @@ public enum NodePropertyType
     String,
     Integer,
     Boolean,
-    Number
+    Number,
+    Object
 }

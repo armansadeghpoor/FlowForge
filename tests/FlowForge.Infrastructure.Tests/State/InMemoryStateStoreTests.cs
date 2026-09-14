@@ -138,6 +138,7 @@ public sealed class InMemoryStateStoreTests
             RetryCount = 0,
             StartedAt = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             CompletedAt = null,
+            Output = null,
             ErrorMessage = null
         };
 }

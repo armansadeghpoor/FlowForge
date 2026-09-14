@@ -112,6 +112,7 @@ public sealed class WorkflowExecutor
             RetryCount = 0,
             StartedAt = startedAt,
             CompletedAt = null,
+            Output = null,
             ErrorMessage = null
         };
         await _stateStore.SaveNodeExecutionAsync(
@@ -150,6 +151,7 @@ public sealed class WorkflowExecutor
                 ? NodeExecutionStatus.Succeeded
                 : NodeExecutionStatus.Failed,
             CompletedAt = DateTime.UtcNow,
+            Output = result.Output,
             ErrorMessage = result.Success ? null : result.ErrorMessage
         };
         await _stateStore.SaveNodeExecutionAsync(

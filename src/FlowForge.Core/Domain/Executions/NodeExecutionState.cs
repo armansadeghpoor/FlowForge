@@ -20,5 +20,10 @@ public sealed record NodeExecutionState
 
     public required DateTime? CompletedAt { get; init; }
 
+    /// <summary>
+    /// Gets the optional output produced by the node execution.
+    /// </summary>
+    public required object? Output { get; init; }
+
     public required string? ErrorMessage { get; init; }
 }
