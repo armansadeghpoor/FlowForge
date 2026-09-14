@@ -238,6 +238,7 @@ public sealed class WorkflowExecutorTests
         new()
         {
             Success = true,
+            Output = null,
             ErrorMessage = null
         };
 
@@ -245,6 +246,7 @@ public sealed class WorkflowExecutorTests
         new()
         {
             Success = false,
+            Output = null,
             ErrorMessage = message
         };
 

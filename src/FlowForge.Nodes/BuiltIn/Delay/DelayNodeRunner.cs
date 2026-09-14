@@ -60,6 +60,7 @@ public sealed class DelayNodeRunner : INodeRunner
         return new NodeExecutionResult
         {
             Success = true,
+            Output = null,
             ErrorMessage = null
         };
     }
@@ -68,6 +69,7 @@ public sealed class DelayNodeRunner : INodeRunner
         new()
         {
             Success = false,
+            Output = null,
             ErrorMessage = errorMessage
         };
 }

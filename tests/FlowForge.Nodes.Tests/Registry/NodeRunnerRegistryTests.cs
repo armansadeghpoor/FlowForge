@@ -109,6 +109,7 @@ public sealed class NodeRunnerRegistryTests
             Task.FromResult(new NodeExecutionResult
             {
                 Success = true,
+                Output = null,
                 ErrorMessage = null
             });
     }

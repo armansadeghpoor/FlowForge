@@ -11,6 +11,11 @@ public sealed record NodeExecutionResult
     public required bool Success { get; init; }
 
     /// <summary>
+    /// Gets the optional output produced by node execution.
+    /// </summary>
+    public required object? Output { get; init; }
+
+    /// <summary>
     /// Gets the error message associated with a failed execution, if any.
     /// </summary>
     public required string? ErrorMessage { get; init; }
