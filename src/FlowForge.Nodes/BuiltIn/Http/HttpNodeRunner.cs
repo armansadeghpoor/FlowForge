@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Core.Domain.Enums;
+using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Nodes.BuiltIn.Http;
@@ -170,8 +172,12 @@ public sealed class HttpNodeRunner : INodeRunner
             {
                 Success = false,
                 Output = new NodeOutput { Value = output },
-                ErrorMessage =
-                    $"HTTP request failed with status code {(int)response.StatusCode} ({response.ReasonPhrase})."
+                Failure = new NodeFailure
+                {
+                    Category = NodeFailureCategory.External,
+                    Message =
+                        $"HTTP request failed with status code {(int)response.StatusCode} ({response.ReasonPhrase})."
+                }
             };
         }
 
@@ -179,7 +185,7 @@ public sealed class HttpNodeRunner : INodeRunner
         {
             Success = true,
             Output = new NodeOutput { Value = output },
-            ErrorMessage = null
+            Failure = null
         };
     }
 
@@ -316,11 +322,15 @@ public sealed class HttpNodeRunner : INodeRunner
         return new ReadOnlyDictionary<string, string[]>(headers);
     }
 
-    private static NodeExecutionResult Failure(string errorMessage) =>
+    private static NodeExecutionResult Failure(string message) =>
         new()
         {
             Success = false,
             Output = null,
-            ErrorMessage = errorMessage
+            Failure = new NodeFailure
+            {
+                Category = NodeFailureCategory.Validation,
+                Message = message
+            }
         };
 }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
+using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Engine.Execution;
 using FlowForge.Infrastructure.State;
@@ -239,7 +240,7 @@ public sealed class WorkflowExecutorTests
         {
             Success = true,
             Output = null,
-            ErrorMessage = null
+            Failure = null
         };
 
     private static NodeExecutionResult Failed(string message) =>
@@ -247,7 +248,11 @@ public sealed class WorkflowExecutorTests
         {
             Success = false,
             Output = null,
-            ErrorMessage = message
+            Failure = new NodeFailure
+            {
+                Category = NodeFailureCategory.Execution,
+                Message = message
+            }
         };
 
     private sealed class FakeNodeRunnerRegistry(params INodeRunner[] runners) : INodeRunnerRegistry

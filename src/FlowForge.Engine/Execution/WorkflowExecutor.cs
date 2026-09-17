@@ -152,7 +152,7 @@ public sealed class WorkflowExecutor
                 : NodeExecutionStatus.Failed,
             CompletedAt = DateTime.UtcNow,
             Output = result.Output,
-            ErrorMessage = result.Success ? null : result.ErrorMessage
+            ErrorMessage = result.Success ? null : result.Failure?.Message
         };
         await _stateStore.SaveNodeExecutionAsync(
             executionId,

@@ -1,3 +1,4 @@
+using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Abstractions.Nodes;
@@ -18,7 +19,7 @@ public sealed record NodeExecutionResult
     public required NodeOutput? Output { get; init; }
 
     /// <summary>
-    /// Gets the error message associated with a failed execution, if any.
+    /// Gets the classified failure associated with execution, if any.
     /// </summary>
-    public required string? ErrorMessage { get; init; }
+    public required NodeFailure? Failure { get; init; }
 }

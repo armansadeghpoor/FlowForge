@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Definitions;
+using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Nodes.BuiltIn.Http;
 
@@ -48,7 +49,7 @@ public sealed class HttpNodeRunnerTests
         var result = await runner.ExecuteAsync(ValidContext(), CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Null(result.ErrorMessage);
+        Assert.Null(result.Failure);
         var output = Assert.IsType<HttpResponseOutput>(result.Output?.Value);
         Assert.Equal(200, output.StatusCode);
         Assert.Equal("response body", output.Body);
@@ -117,9 +118,7 @@ public sealed class HttpNodeRunnerTests
 
         var result = await runner.ExecuteAsync(ValidContext(url: url), CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Null(result.Output);
-        Assert.Contains("absolute HTTP or HTTPS", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "absolute HTTP or HTTPS");
         Assert.Equal(0, handler.InvocationCount);
     }
 
@@ -134,9 +133,7 @@ public sealed class HttpNodeRunnerTests
             ValidContext(method: "OPTIONS"),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Null(result.Output);
-        Assert.Contains("GET, POST, PUT, DELETE, or PATCH", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "GET, POST, PUT, DELETE, or PATCH");
         Assert.Equal(0, handler.InvocationCount);
     }
 
@@ -153,9 +150,7 @@ public sealed class HttpNodeRunnerTests
             ValidContext(timeoutMilliseconds: timeoutMilliseconds),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Null(result.Output);
-        Assert.Contains("timeoutMs", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "timeoutMs");
         Assert.Equal(0, handler.InvocationCount);
     }
 
@@ -172,7 +167,9 @@ public sealed class HttpNodeRunnerTests
         var result = await runner.ExecuteAsync(ValidContext(), CancellationToken.None);
 
         Assert.False(result.Success);
-        Assert.Contains("502", result.ErrorMessage ?? string.Empty);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(NodeFailureCategory.External, result.Failure.Category);
+        Assert.Contains("502", result.Failure.Message);
         var output = Assert.IsType<HttpResponseOutput>(result.Output?.Value);
         Assert.Equal(502, output.StatusCode);
         Assert.Equal("upstream failed", output.Body);
@@ -209,6 +206,17 @@ public sealed class HttpNodeRunnerTests
         Assert.Equal(name, property.Name);
         Assert.Equal(type, property.Type);
         Assert.Equal(required, property.Required);
+    }
+
+    private static void AssertValidationFailure(
+        NodeExecutionResult result,
+        string expectedMessagePart)
+    {
+        Assert.False(result.Success);
+        Assert.Null(result.Output);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(NodeFailureCategory.Validation, result.Failure.Category);
+        Assert.Contains(expectedMessagePart, result.Failure.Message);
     }
 
     private static NodeExecutionContext ValidContext(

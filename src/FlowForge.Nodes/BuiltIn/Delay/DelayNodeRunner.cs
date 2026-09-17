@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Core.Domain.Enums;
+using FlowForge.Core.Domain.Failures;
 
 namespace FlowForge.Nodes.BuiltIn.Delay;
 
@@ -61,15 +63,19 @@ public sealed class DelayNodeRunner : INodeRunner
         {
             Success = true,
             Output = null,
-            ErrorMessage = null
+            Failure = null
         };
     }
 
-    private static NodeExecutionResult Failure(string errorMessage) =>
+    private static NodeExecutionResult Failure(string message) =>
         new()
         {
             Success = false,
             Output = null,
-            ErrorMessage = errorMessage
+            Failure = new NodeFailure
+            {
+                Category = NodeFailureCategory.Validation,
+                Message = message
+            }
         };
 }

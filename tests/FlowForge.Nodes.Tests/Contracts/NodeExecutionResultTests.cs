@@ -1,4 +1,6 @@
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Core.Domain.Enums;
+using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Nodes.Tests.Contracts;
@@ -13,13 +15,13 @@ public sealed class NodeExecutionResultTests
         {
             Success = true,
             Output = new NodeOutput { Value = output },
-            ErrorMessage = null
+            Failure = null
         };
 
         Assert.True(result.Success);
         Assert.NotNull(result.Output);
         Assert.Same(output, result.Output.Value);
-        Assert.Null(result.ErrorMessage);
+        Assert.Null(result.Failure);
     }
 
     [Fact]
@@ -29,7 +31,7 @@ public sealed class NodeExecutionResultTests
         {
             Success = true,
             Output = null,
-            ErrorMessage = null
+            Failure = null
         };
 
         Assert.True(result.Success);
@@ -37,17 +39,22 @@ public sealed class NodeExecutionResultTests
     }
 
     [Fact]
-    public void FailedResult_PreservesErrorMessage()
+    public void FailedResult_ContainsNodeFailure()
     {
+        var failure = new NodeFailure
+        {
+            Category = NodeFailureCategory.Execution,
+            Message = "Node failed."
+        };
         var result = new NodeExecutionResult
         {
             Success = false,
             Output = null,
-            ErrorMessage = "Node failed."
+            Failure = failure
         };
 
         Assert.False(result.Success);
         Assert.Null(result.Output);
-        Assert.Equal("Node failed.", result.ErrorMessage);
+        Assert.Same(failure, result.Failure);
     }
 }

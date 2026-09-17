@@ -110,7 +110,7 @@ public sealed class NodeRunnerRegistryTests
             {
                 Success = true,
                 Output = null,
-                ErrorMessage = null
+                Failure = null
             });
     }
 }

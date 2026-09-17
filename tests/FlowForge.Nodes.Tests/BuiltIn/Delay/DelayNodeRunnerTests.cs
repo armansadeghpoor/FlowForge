@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Definitions;
+using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Nodes.BuiltIn.Delay;
 using FlowForge.Nodes.Registry;
@@ -40,7 +41,7 @@ public sealed class DelayNodeRunnerTests
         var result = await _runner.ExecuteAsync(ContextWithDuration(0), CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Null(result.ErrorMessage);
+        Assert.Null(result.Failure);
     }
 
     [Fact]
@@ -49,7 +50,7 @@ public sealed class DelayNodeRunnerTests
         var result = await _runner.ExecuteAsync(ContextWithDuration(1), CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Null(result.ErrorMessage);
+        Assert.Null(result.Failure);
     }
 
     [Fact]
@@ -59,8 +60,7 @@ public sealed class DelayNodeRunnerTests
             Context(new Dictionary<string, JsonElement>()),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("durationMs", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "durationMs");
     }
 
     [Fact]
@@ -70,8 +70,7 @@ public sealed class DelayNodeRunnerTests
             ContextWithDuration("100"),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("integer", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "integer");
     }
 
     [Fact]
@@ -81,8 +80,7 @@ public sealed class DelayNodeRunnerTests
             ContextWithDuration(1.5),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("integer", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "integer");
     }
 
     [Fact]
@@ -90,8 +88,7 @@ public sealed class DelayNodeRunnerTests
     {
         var result = await _runner.ExecuteAsync(ContextWithDuration(-1), CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("greater than or equal to zero", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "greater than or equal to zero");
     }
 
     [Fact]
@@ -101,8 +98,7 @@ public sealed class DelayNodeRunnerTests
             ContextWithDuration((long)int.MaxValue + 1),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("Task.Delay", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "Task.Delay");
     }
 
     [Theory]
@@ -114,8 +110,7 @@ public sealed class DelayNodeRunnerTests
             ContextWithDuration(duration),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("integer", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "integer");
     }
 
     [Fact]
@@ -125,8 +120,7 @@ public sealed class DelayNodeRunnerTests
             ContextWithDuration<object?>(null),
             CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Contains("integer", result.ErrorMessage ?? string.Empty);
+        AssertValidationFailure(result, "integer");
     }
 
     [Fact]
@@ -156,6 +150,16 @@ public sealed class DelayNodeRunnerTests
         {
             ["durationMs"] = JsonSerializer.SerializeToElement(duration)
         });
+
+    private static void AssertValidationFailure(
+        NodeExecutionResult result,
+        string expectedMessagePart)
+    {
+        Assert.False(result.Success);
+        Assert.NotNull(result.Failure);
+        Assert.Equal(NodeFailureCategory.Validation, result.Failure.Category);
+        Assert.Contains(expectedMessagePart, result.Failure.Message);
+    }
 
     private static NodeExecutionContext Context(
         IReadOnlyDictionary<string, JsonElement> configuration) =>
