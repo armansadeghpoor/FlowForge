@@ -50,6 +50,7 @@ public sealed class WorkflowExecutorTests
         Assert.NotNull(storedExecution);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, storedExecution.Status);
         Assert.Equal(execution.CompletedAt, storedExecution.CompletedAt);
+        Assert.Equal(nodeState, Assert.Single(storedExecution.Nodes));
         Assert.NotNull(storedNode);
         Assert.Equal(NodeExecutionStatus.Succeeded, storedNode.Status);
     }
@@ -159,12 +160,15 @@ public sealed class WorkflowExecutorTests
         var nodeState = Assert.Single(execution.Nodes);
         Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
         Assert.Equal(NodeExecutionStatus.Failed, nodeState.Status);
-        Assert.Contains("missing", nodeState.ErrorMessage ?? string.Empty);
+        Assert.Contains("missing", nodeState.Failure?.Message ?? string.Empty);
+        Assert.Equal(NodeFailureCategory.Configuration, nodeState.Failure?.Category);
         Assert.NotNull(execution.CompletedAt);
         Assert.NotNull(storedExecution);
         Assert.Equal(WorkflowExecutionStatus.Failed, storedExecution.Status);
         Assert.NotNull(storedNode);
         Assert.Equal(NodeExecutionStatus.Failed, storedNode.Status);
+        Assert.Equal(nodeState.Failure, storedNode.Failure);
+        Assert.Equal(nodeState, Assert.Single(storedExecution.Nodes));
     }
 
     [Fact]
@@ -201,11 +205,13 @@ public sealed class WorkflowExecutorTests
         Assert.Equal([nodeA.Id], invocations.ToArray());
         Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
         Assert.Equal(NodeExecutionStatus.Failed, nodeState.Status);
-        Assert.Equal("Node failed.", nodeState.ErrorMessage);
+        Assert.Equal("Node failed.", nodeState.Failure?.Message);
         Assert.NotNull(storedExecution);
         Assert.Equal(WorkflowExecutionStatus.Failed, storedExecution.Status);
         Assert.NotNull(storedNode);
         Assert.Equal(NodeExecutionStatus.Failed, storedNode.Status);
+        Assert.Equal(NodeFailureCategory.Execution, storedNode.Failure?.Category);
+        Assert.Equal(nodeState.Failure, storedNode.Failure);
     }
 
     [Fact]
@@ -219,12 +225,18 @@ public sealed class WorkflowExecutorTests
             [new RetryNodeExecutionPolicy(2, TimeSpan.Zero)],
             new FakeNodeRunner(
                 "test",
-                (context, _) =>
+                async (context, token) =>
                 {
                     contexts.Add(context);
-                    return Task.FromResult(Interlocked.Increment(ref attempts) == 1
+                    var running = await stateStore.GetNodeExecutionAsync(
+                        context.WorkflowExecutionId, context.NodeExecutionId, token);
+                    Assert.NotNull(running);
+                    Assert.Equal(NodeExecutionStatus.Running, running.Status);
+                    Assert.Equal(context.AttemptNumber, running.AttemptNumber);
+                    Assert.Equal(context.AttemptNumber - 1, running.RetryCount);
+                    return Interlocked.Increment(ref attempts) == 1
                         ? Failed("External failure.", NodeFailureCategory.External)
-                        : Succeeded());
+                        : Succeeded();
                 }));
 
         var execution = await engine.ExecuteAsync(
@@ -240,6 +252,35 @@ public sealed class WorkflowExecutorTests
         });
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
         Assert.Equal(NodeExecutionStatus.Succeeded, Assert.Single(execution.Nodes).Status);
+        var stored = await stateStore.GetExecutionAsync(execution.Id, CancellationToken.None);
+        Assert.NotNull(stored);
+        var persistedNode = Assert.Single(stored.Nodes);
+        Assert.Equal(Assert.Single(execution.Nodes), persistedNode);
+        Assert.Equal(2, persistedNode.AttemptNumber);
+        Assert.Equal(1, persistedNode.RetryCount);
+        Assert.Null(persistedNode.Failure);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExhaustedRetries_PersistsLastAttemptAndClassifiedFailure()
+    {
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore,
+            [new RetryNodeExecutionPolicy(3, TimeSpan.Zero)],
+            new FakeNodeRunner("test", (context, _) => Task.FromResult(
+                Failed($"Failure {context.AttemptNumber}.", NodeFailureCategory.External))));
+
+        var execution = await engine.ExecuteAsync(Workflow([Node(1)]), CancellationToken.None);
+        var stored = await stateStore.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(stored);
+        Assert.Equal(WorkflowExecutionStatus.Failed, stored.Status);
+        var node = Assert.Single(stored.Nodes);
+        Assert.Equal(Assert.Single(execution.Nodes), node);
+        Assert.Equal(3, node.AttemptNumber);
+        Assert.Equal(2, node.RetryCount);
+        Assert.Equal(NodeFailureCategory.External, node.Failure?.Category);
+        Assert.Equal("Failure 3.", node.Failure?.Message);
     }
 
     private static WorkflowEngine CreateEngine(

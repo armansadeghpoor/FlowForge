@@ -4,6 +4,7 @@ using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
+using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Graph;
 
@@ -110,16 +111,24 @@ public sealed class WorkflowExecutor
         CancellationToken cancellationToken)
     {
         var startedAt = DateTime.UtcNow;
+        var context = new NodeExecutionContext
+        {
+            NodeDefinition = node,
+            WorkflowExecutionId = executionId,
+            NodeExecutionId = new NodeExecutionId(Guid.NewGuid()),
+            AttemptNumber = 1
+        };
         var nodeExecution = new NodeExecutionState
         {
-            Id = new NodeExecutionId(Guid.NewGuid()),
+            Id = context.NodeExecutionId,
             NodeId = node.Id,
             Status = NodeExecutionStatus.Running,
             RetryCount = 0,
+            AttemptNumber = context.AttemptNumber,
             StartedAt = startedAt,
             CompletedAt = null,
             Output = null,
-            ErrorMessage = null
+            Failure = null
         };
         await _stateStore.SaveNodeExecutionAsync(
             executionId,
@@ -133,7 +142,11 @@ public sealed class WorkflowExecutor
             {
                 Status = NodeExecutionStatus.Failed,
                 CompletedAt = DateTime.UtcNow,
-                ErrorMessage = $"No node runner is registered for node type '{node.Type}'."
+                Failure = new NodeFailure
+                {
+                    Category = NodeFailureCategory.Configuration,
+                    Message = $"No node runner is registered for node type '{node.Type}'."
+                }
             };
             await _stateStore.SaveNodeExecutionAsync(
                 executionId,
@@ -143,16 +156,22 @@ public sealed class WorkflowExecutor
             return failedNodeExecution;
         }
 
-        var context = new NodeExecutionContext
-        {
-            NodeDefinition = node,
-            WorkflowExecutionId = executionId,
-            NodeExecutionId = nodeExecution.Id,
-            AttemptNumber = 1
-        };
         var result = await _executionPipeline.ExecuteAsync(
             context,
-            (currentContext, token) => runner.ExecuteAsync(currentContext, token),
+            async (currentContext, token) =>
+            {
+                if (nodeExecution.AttemptNumber != currentContext.AttemptNumber)
+                {
+                    nodeExecution = nodeExecution with
+                    {
+                        AttemptNumber = currentContext.AttemptNumber,
+                        RetryCount = currentContext.AttemptNumber - 1
+                    };
+                    await _stateStore.SaveNodeExecutionAsync(executionId, nodeExecution, token);
+                }
+
+                return await runner.ExecuteAsync(currentContext, token);
+            },
             cancellationToken);
 
         var completedNodeExecution = nodeExecution with
@@ -162,7 +181,7 @@ public sealed class WorkflowExecutor
                 : NodeExecutionStatus.Failed,
             CompletedAt = DateTime.UtcNow,
             Output = result.Output,
-            ErrorMessage = result.Success ? null : result.Failure?.Message
+            Failure = result.Failure
         };
         await _stateStore.SaveNodeExecutionAsync(
             executionId,

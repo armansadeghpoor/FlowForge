@@ -10,22 +10,26 @@ namespace FlowForge.Abstractions.State;
 public interface IStateStore
 {
     /// <summary>
-    /// Creates a workflow execution record.
+    /// Creates a workflow execution snapshot, including its supplied node states.
+    /// Existing executions are never overwritten.
     /// </summary>
     /// <param name="execution">The workflow execution to create.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <exception cref="InvalidOperationException">The execution identifier already exists.</exception>
     Task CreateExecutionAsync(
         WorkflowExecution execution,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Updates the lifecycle status and timestamps of a workflow execution.
+    /// Replaces the lifecycle status and timestamps of an existing workflow execution,
+    /// preserving its node states. Supplied null timestamps clear the stored values.
     /// </summary>
     /// <param name="id">The workflow execution identifier.</param>
     /// <param name="status">The workflow execution status.</param>
     /// <param name="startedAt">The time execution started, if applicable.</param>
     /// <param name="completedAt">The time execution completed, if applicable.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <exception cref="KeyNotFoundException">The workflow execution does not exist.</exception>
     Task UpdateWorkflowStatusAsync(
         WorkflowExecutionId id,
         WorkflowExecutionStatus status,
@@ -34,18 +38,21 @@ public interface IStateStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Saves the execution state of an individual workflow node.
+    /// Saves a node snapshot within an existing workflow execution. A save replaces
+    /// the entire node state with the same node execution identifier within that workflow,
+    /// or adds it when absent. The last applied save wins.
     /// </summary>
     /// <param name="executionId">The containing workflow execution identifier.</param>
     /// <param name="nodeExecution">The node execution state to save.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <exception cref="KeyNotFoundException">The workflow execution does not exist.</exception>
     Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Gets a workflow execution by its identifier.
+    /// Gets a workflow execution aggregate by its identifier, including its saved node states.
     /// </summary>
     /// <param name="id">The workflow execution identifier.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>

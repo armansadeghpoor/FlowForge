@@ -1,4 +1,5 @@
 using FlowForge.Core.Domain.Enums;
+using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Domain.Values;
 
@@ -17,6 +18,11 @@ public sealed record NodeExecutionState
 
     public required int RetryCount { get; init; }
 
+    /// <summary>
+    /// Gets the current execution attempt number, starting at one.
+    /// </summary>
+    public required int AttemptNumber { get; init; }
+
     public required DateTime? StartedAt { get; init; }
 
     public required DateTime? CompletedAt { get; init; }
@@ -26,5 +32,8 @@ public sealed record NodeExecutionState
     /// </summary>
     public required NodeOutput? Output { get; init; }
 
-    public required string? ErrorMessage { get; init; }
+    /// <summary>
+    /// Gets the classified failure associated with execution, if any.
+    /// </summary>
+    public required NodeFailure? Failure { get; init; }
 }

@@ -12,8 +12,6 @@ namespace FlowForge.Infrastructure.State;
 public sealed class InMemoryStateStore : IStateStore
 {
     private readonly ConcurrentDictionary<WorkflowExecutionId, WorkflowExecution> _executions = new();
-    private readonly ConcurrentDictionary<(WorkflowExecutionId, NodeExecutionId), NodeExecutionState>
-        _nodeExecutions = new();
 
     /// <inheritdoc />
     public Task CreateExecutionAsync(
@@ -70,9 +68,30 @@ public sealed class InMemoryStateStore : IStateStore
         ArgumentNullException.ThrowIfNull(nodeExecution);
         cancellationToken.ThrowIfCancellationRequested();
 
-        _nodeExecutions[(executionId, nodeExecution.Id)] = nodeExecution with { };
+        while (_executions.TryGetValue(executionId, out var current))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var nodes = current.Nodes.ToList();
+            var index = nodes.FindIndex(node => node.Id == nodeExecution.Id);
+            var snapshot = nodeExecution with { };
+            if (index >= 0)
+            {
+                nodes[index] = snapshot;
+            }
+            else
+            {
+                nodes.Add(snapshot);
+            }
 
-        return Task.CompletedTask;
+            var updated = current with { Nodes = Array.AsReadOnly(nodes.ToArray()) };
+            if (_executions.TryUpdate(executionId, updated, current))
+            {
+                return Task.CompletedTask;
+            }
+        }
+
+        throw new KeyNotFoundException(
+            $"Workflow execution '{executionId.Value}' was not found.");
     }
 
     /// <inheritdoc />
@@ -97,9 +116,10 @@ public sealed class InMemoryStateStore : IStateStore
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var nodeExecution = _nodeExecutions.TryGetValue((executionId, nodeExecutionId), out var stored)
-            ? stored with { }
+        var stored = _executions.TryGetValue(executionId, out var execution)
+            ? execution.Nodes.FirstOrDefault(node => node.Id == nodeExecutionId)
             : null;
+        var nodeExecution = stored is null ? null : stored with { };
 
         return Task.FromResult(nodeExecution);
     }
