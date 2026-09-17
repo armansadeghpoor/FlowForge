@@ -7,7 +7,7 @@ namespace FlowForge.Engine.Policies;
 /// <summary>
 /// Retries eligible node execution failures with exponential backoff.
 /// </summary>
-public sealed class RetryNodeExecutionPolicy : INodeExecutionPolicy
+public sealed class RetryNodeExecutionPolicy : IExecutionMiddleware
 {
     private readonly int _maxAttempts;
     private readonly TimeSpan _initialDelay;
@@ -35,10 +35,10 @@ public sealed class RetryNodeExecutionPolicy : INodeExecutionPolicy
 
     /// <inheritdoc />
     public async Task<NodeExecutionResult> ExecuteAsync(
-        Func<CancellationToken, Task<NodeExecutionResult>> execution,
+        Func<CancellationToken, Task<NodeExecutionResult>> next,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(execution);
+        ArgumentNullException.ThrowIfNull(next);
 
         var delay = _initialDelay;
 
@@ -46,7 +46,7 @@ public sealed class RetryNodeExecutionPolicy : INodeExecutionPolicy
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await execution(cancellationToken);
+            var result = await next(cancellationToken);
             if (result.Success || !IsRetryable(result) || attempt == _maxAttempts)
             {
                 return result;

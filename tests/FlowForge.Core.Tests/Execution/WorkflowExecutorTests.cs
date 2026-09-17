@@ -213,7 +213,7 @@ public sealed class WorkflowExecutorTests
         var stateStore = new InMemoryStateStore();
         var engine = CreateEngine(
             stateStore,
-            new RetryNodeExecutionPolicy(2, TimeSpan.Zero),
+            [new RetryNodeExecutionPolicy(2, TimeSpan.Zero)],
             new FakeNodeRunner(
                 "test",
                 (_, _) => Task.FromResult(
@@ -235,17 +235,17 @@ public sealed class WorkflowExecutorTests
         params INodeRunner[] runners) =>
         CreateEngine(
             stateStore,
-            new RetryNodeExecutionPolicy(1, TimeSpan.Zero),
+            Array.Empty<IExecutionMiddleware>(),
             runners);
 
     private static WorkflowEngine CreateEngine(
         InMemoryStateStore stateStore,
-        INodeExecutionPolicy nodeExecutionPolicy,
+        IEnumerable<IExecutionMiddleware> middlewares,
         params INodeRunner[] runners) =>
         new(new WorkflowExecutor(
             new FakeNodeRunnerRegistry(runners),
             stateStore,
-            nodeExecutionPolicy));
+            new ExecutionPipeline(middlewares)));
 
     private static NodeDefinition Node(int value, string type = "test") =>
         new()

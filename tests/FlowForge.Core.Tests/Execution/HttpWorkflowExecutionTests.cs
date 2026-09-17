@@ -4,7 +4,6 @@ using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Engine.Execution;
-using FlowForge.Engine.Policies;
 using FlowForge.Infrastructure.State;
 using FlowForge.Nodes.BuiltIn.Http;
 using FlowForge.Nodes.Registry;
@@ -23,7 +22,7 @@ public sealed class HttpWorkflowExecutionTests
         var engine = new WorkflowEngine(new WorkflowExecutor(
             registry,
             stateStore,
-            new RetryNodeExecutionPolicy(1, TimeSpan.Zero)));
+            new ExecutionPipeline([])));
         var workflow = new WorkflowDefinition
         {
             Id = new WorkflowId(Guid.NewGuid()),

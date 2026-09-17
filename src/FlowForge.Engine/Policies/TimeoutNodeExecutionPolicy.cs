@@ -8,7 +8,7 @@ namespace FlowForge.Engine.Policies;
 /// <summary>
 /// Limits the amount of time allowed for a node execution.
 /// </summary>
-public sealed class TimeoutNodeExecutionPolicy : INodeExecutionPolicy
+public sealed class TimeoutNodeExecutionPolicy : IExecutionMiddleware
 {
     private readonly TimeSpan _timeout;
 
@@ -31,10 +31,10 @@ public sealed class TimeoutNodeExecutionPolicy : INodeExecutionPolicy
 
     /// <inheritdoc />
     public async Task<NodeExecutionResult> ExecuteAsync(
-        Func<CancellationToken, Task<NodeExecutionResult>> execution,
+        Func<CancellationToken, Task<NodeExecutionResult>> next,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(execution);
+        ArgumentNullException.ThrowIfNull(next);
         cancellationToken.ThrowIfCancellationRequested();
 
         using var timeoutSource = new CancellationTokenSource(_timeout);
@@ -44,7 +44,7 @@ public sealed class TimeoutNodeExecutionPolicy : INodeExecutionPolicy
 
         try
         {
-            var executionTask = execution(linkedSource.Token);
+            var executionTask = next(linkedSource.Token);
             return await executionTask.WaitAsync(linkedSource.Token);
         }
         catch (OperationCanceledException) when (
