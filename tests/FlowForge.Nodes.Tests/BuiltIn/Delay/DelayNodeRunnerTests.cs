@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Execution;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Definitions;
@@ -165,12 +166,14 @@ public sealed class DelayNodeRunnerTests
         IReadOnlyDictionary<string, JsonElement> configuration) =>
         new()
         {
-            Node = new NodeDefinition
+            NodeDefinition = new NodeDefinition
             {
                 Id = new NodeId(Guid.NewGuid()),
                 Type = "delay",
                 Configuration = configuration
             },
-            ExecutionId = new WorkflowExecutionId(Guid.NewGuid())
+            WorkflowExecutionId = new WorkflowExecutionId(Guid.NewGuid()),
+            NodeExecutionId = new NodeExecutionId(Guid.NewGuid()),
+            AttemptNumber = 1
         };
 }

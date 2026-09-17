@@ -14,9 +14,15 @@ public sealed class ExecutionPipelineTests
     {
         var expected = Succeeded();
         var pipeline = new ExecutionPipeline([]);
+        var context = TestNodeExecutionContext.Create();
 
         var result = await pipeline.ExecuteAsync(
-            _ => Task.FromResult(expected),
+            context,
+            (receivedContext, _) =>
+            {
+                Assert.Same(context, receivedContext);
+                return Task.FromResult(expected);
+            },
             CancellationToken.None);
 
         Assert.Same(expected, result);
@@ -30,7 +36,8 @@ public sealed class ExecutionPipelineTests
         var pipeline = new ExecutionPipeline([middleware]);
 
         await pipeline.ExecuteAsync(
-            _ =>
+            TestNodeExecutionContext.Create(),
+            (_, _) =>
             {
                 steps.Add("terminal");
                 return Task.FromResult(Succeeded());
@@ -51,7 +58,8 @@ public sealed class ExecutionPipelineTests
         ]);
 
         await pipeline.ExecuteAsync(
-            _ =>
+            TestNodeExecutionContext.Create(),
+            (_, _) =>
             {
                 steps.Add("terminal");
                 return Task.FromResult(Succeeded());
@@ -77,7 +85,8 @@ public sealed class ExecutionPipelineTests
             [new RetryNodeExecutionPolicy(2, TimeSpan.Zero)]);
 
         var result = await pipeline.ExecuteAsync(
-            _ => Task.FromResult(
+            TestNodeExecutionContext.Create(),
+            (_, _) => Task.FromResult(
                 ++attempts == 1
                     ? Failed(NodeFailureCategory.External, "External failure.")
                     : Succeeded()),
@@ -96,20 +105,57 @@ public sealed class ExecutionPipelineTests
             [new TimeoutNodeExecutionPolicy(TimeSpan.FromMilliseconds(20))]);
 
         var result = await pipeline.ExecuteAsync(
-            _ => incompleteExecution.Task,
+            TestNodeExecutionContext.Create(),
+            (_, _) => incompleteExecution.Task,
             CancellationToken.None);
 
         Assert.False(result.Success);
         Assert.Equal(NodeFailureCategory.Cancelled, result.Failure?.Category);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_MiddlewarePassesUpdatedContextToNextAndTerminal()
+    {
+        var original = TestNodeExecutionContext.Create();
+        var updated = original with { AttemptNumber = 2 };
+        var expected = Succeeded();
+        using var cancellationSource = new CancellationTokenSource();
+        var pipeline = new ExecutionPipeline(
+        [
+            new DelegateMiddleware((context, next, token) =>
+            {
+                Assert.Same(original, context);
+                Assert.Equal(cancellationSource.Token, token);
+                return next(updated, token);
+            }),
+            new DelegateMiddleware((context, next, token) =>
+            {
+                Assert.Same(updated, context);
+                return next(context, token);
+            })
+        ]);
+
+        var result = await pipeline.ExecuteAsync(
+            original,
+            (context, token) =>
+            {
+                Assert.Same(updated, context);
+                Assert.Equal(cancellationSource.Token, token);
+                return Task.FromResult(expected);
+            },
+            cancellationSource.Token);
+
+        Assert.Same(expected, result);
+        Assert.Equal(1, original.AttemptNumber);
+    }
+
     private static IExecutionMiddleware RecordingMiddleware(
         string name,
         ICollection<string> steps) =>
-        new DelegateMiddleware(async (next, cancellationToken) =>
+        new DelegateMiddleware(async (context, next, cancellationToken) =>
         {
             steps.Add($"{name}-before");
-            var result = await next(cancellationToken);
+            var result = await next(context, cancellationToken);
             steps.Add($"{name}-after");
             return result;
         });
@@ -138,13 +184,15 @@ public sealed class ExecutionPipelineTests
 
     private sealed class DelegateMiddleware(
         Func<
-            Func<CancellationToken, Task<NodeExecutionResult>>,
+            NodeExecutionContext,
+            Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>>,
             CancellationToken,
             Task<NodeExecutionResult>> execute) : IExecutionMiddleware
     {
         public Task<NodeExecutionResult> ExecuteAsync(
-            Func<CancellationToken, Task<NodeExecutionResult>> next,
+            NodeExecutionContext context,
+            Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>> next,
             CancellationToken cancellationToken) =>
-            execute(next, cancellationToken);
+            execute(context, next, cancellationToken);
     }
 }

@@ -31,9 +31,11 @@ public sealed class TimeoutNodeExecutionPolicy : IExecutionMiddleware
 
     /// <inheritdoc />
     public async Task<NodeExecutionResult> ExecuteAsync(
-        Func<CancellationToken, Task<NodeExecutionResult>> next,
+        NodeExecutionContext context,
+        Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>> next,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(next);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -44,7 +46,7 @@ public sealed class TimeoutNodeExecutionPolicy : IExecutionMiddleware
 
         try
         {
-            var executionTask = next(linkedSource.Token);
+            var executionTask = next(context, linkedSource.Token);
             return await executionTask.WaitAsync(linkedSource.Token);
         }
         catch (OperationCanceledException) when (

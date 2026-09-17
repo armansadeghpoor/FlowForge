@@ -1,3 +1,4 @@
+using FlowForge.Core.Tests.Execution;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Engine.Policies;
@@ -25,9 +26,15 @@ public sealed class TimeoutNodeExecutionPolicyTests
     {
         var expected = Succeeded();
         var policy = new TimeoutNodeExecutionPolicy(TimeSpan.FromSeconds(1));
+        var context = TestNodeExecutionContext.Create() with { AttemptNumber = 2 };
 
         var result = await policy.ExecuteAsync(
-            _ => Task.FromResult(expected),
+            context,
+            (receivedContext, _) =>
+            {
+                Assert.Same(context, receivedContext);
+                return Task.FromResult(expected);
+            },
             CancellationToken.None);
 
         Assert.Same(expected, result);
@@ -41,7 +48,8 @@ public sealed class TimeoutNodeExecutionPolicyTests
         var policy = new TimeoutNodeExecutionPolicy(TimeSpan.FromMilliseconds(20));
 
         var result = await policy.ExecuteAsync(
-            _ => incompleteExecution.Task,
+            TestNodeExecutionContext.Create(),
+            (_, _) => incompleteExecution.Task,
             CancellationToken.None);
 
         Assert.False(result.Success);
@@ -60,7 +68,8 @@ public sealed class TimeoutNodeExecutionPolicyTests
         using var cancellationSource = new CancellationTokenSource();
 
         var executionTask = policy.ExecuteAsync(
-            async token =>
+            TestNodeExecutionContext.Create(),
+            async (_, token) =>
             {
                 executionStarted.TrySetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);

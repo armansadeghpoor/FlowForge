@@ -1,3 +1,5 @@
+using FlowForge.Core.Tests.Execution;
+using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Failures;
@@ -29,7 +31,8 @@ public sealed class RetryNodeExecutionPolicyTests
         var policy = new RetryNodeExecutionPolicy(3, TimeSpan.Zero);
 
         var result = await policy.ExecuteAsync(
-            _ =>
+            TestNodeExecutionContext.Create(),
+            (_, _) =>
             {
                 attempts++;
                 return Task.FromResult(expected);
@@ -48,7 +51,8 @@ public sealed class RetryNodeExecutionPolicyTests
         var policy = new RetryNodeExecutionPolicy(2, TimeSpan.Zero);
 
         var result = await policy.ExecuteAsync(
-            _ => Task.FromResult(
+            TestNodeExecutionContext.Create(),
+            (_, _) => Task.FromResult(
                 ++attempts == 1
                     ? Failed(NodeFailureCategory.External, "External failure.")
                     : expected),
@@ -66,7 +70,8 @@ public sealed class RetryNodeExecutionPolicyTests
         var policy = new RetryNodeExecutionPolicy(2, TimeSpan.Zero);
 
         var result = await policy.ExecuteAsync(
-            _ => Task.FromResult(
+            TestNodeExecutionContext.Create(),
+            (_, _) => Task.FromResult(
                 ++attempts == 1
                     ? Failed(NodeFailureCategory.Unknown, "Unknown failure.")
                     : expected),
@@ -89,7 +94,8 @@ public sealed class RetryNodeExecutionPolicyTests
         var policy = new RetryNodeExecutionPolicy(3, TimeSpan.Zero);
 
         var result = await policy.ExecuteAsync(
-            _ =>
+            TestNodeExecutionContext.Create(),
+            (_, _) =>
             {
                 attempts++;
                 return Task.FromResult(expected);
@@ -107,7 +113,8 @@ public sealed class RetryNodeExecutionPolicyTests
         var policy = new RetryNodeExecutionPolicy(3, TimeSpan.Zero);
 
         var result = await policy.ExecuteAsync(
-            _ =>
+            TestNodeExecutionContext.Create(),
+            (_, _) =>
             {
                 attempts++;
                 return Task.FromResult(Failed(
@@ -129,7 +136,8 @@ public sealed class RetryNodeExecutionPolicyTests
         using var cancellationSource = new CancellationTokenSource();
 
         var executionTask = policy.ExecuteAsync(
-            _ =>
+            TestNodeExecutionContext.Create(),
+            (_, _) =>
             {
                 attempts++;
                 return Task.FromResult(Failed(
@@ -141,6 +149,38 @@ public sealed class RetryNodeExecutionPolicyTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => executionTask);
         Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Retries_UsesDistinctContextsWithStableIdentity()
+    {
+        var original = TestNodeExecutionContext.Create();
+        var contexts = new List<NodeExecutionContext>();
+        var policy = new RetryNodeExecutionPolicy(3, TimeSpan.Zero);
+        using var cancellationSource = new CancellationTokenSource();
+
+        var result = await policy.ExecuteAsync(
+            original,
+            (context, token) =>
+            {
+                contexts.Add(context);
+                Assert.Equal(cancellationSource.Token, token);
+                return Task.FromResult(context.AttemptNumber < 3
+                    ? Failed(NodeFailureCategory.External, "Try again.")
+                    : Succeeded());
+            },
+            cancellationSource.Token);
+
+        Assert.True(result.Success);
+        Assert.Equal([1, 2, 3], contexts.Select(context => context.AttemptNumber));
+        Assert.Equal(1, original.AttemptNumber);
+        Assert.All(contexts, context =>
+        {
+            Assert.NotSame(original, context);
+            Assert.Equal(original.WorkflowExecutionId, context.WorkflowExecutionId);
+            Assert.Equal(original.NodeExecutionId, context.NodeExecutionId);
+            Assert.Same(original.NodeDefinition, context.NodeDefinition);
+        });
     }
 
     private static NodeExecutionResult Succeeded() =>

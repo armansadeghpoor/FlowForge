@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Execution;
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.Json;
@@ -80,7 +81,7 @@ public sealed class HttpNodeRunner : INodeRunner
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!TryGetRequiredString(context.Node.Configuration, "method", out var methodName))
+        if (!TryGetRequiredString(context.NodeDefinition.Configuration, "method", out var methodName))
         {
             return Failure("HTTP node configuration 'method' must be a string.");
         }
@@ -91,7 +92,7 @@ public sealed class HttpNodeRunner : INodeRunner
                 "HTTP node configuration 'method' must be one of GET, POST, PUT, DELETE, or PATCH.");
         }
 
-        if (!TryGetRequiredString(context.Node.Configuration, "url", out var urlValue) ||
+        if (!TryGetRequiredString(context.NodeDefinition.Configuration, "url", out var urlValue) ||
             !Uri.TryCreate(urlValue, UriKind.Absolute, out var uri) ||
             !IsHttpScheme(uri) ||
             string.IsNullOrEmpty(uri.Host))
@@ -100,17 +101,17 @@ public sealed class HttpNodeRunner : INodeRunner
                 "HTTP node configuration 'url' must be an absolute HTTP or HTTPS URI.");
         }
 
-        if (!TryGetHeaders(context.Node.Configuration, out var headers, out var headersError))
+        if (!TryGetHeaders(context.NodeDefinition.Configuration, out var headers, out var headersError))
         {
             return Failure(headersError);
         }
 
-        if (!TryGetOptionalString(context.Node.Configuration, "body", out var body))
+        if (!TryGetOptionalString(context.NodeDefinition.Configuration, "body", out var body))
         {
             return Failure("HTTP node configuration 'body' must be a string when supplied.");
         }
 
-        if (!TryGetTimeout(context.Node.Configuration, out var timeoutMilliseconds))
+        if (!TryGetTimeout(context.NodeDefinition.Configuration, out var timeoutMilliseconds))
         {
             return Failure(
                 "HTTP node configuration 'timeoutMs' must be a JSON integer greater than zero.");

@@ -10,10 +10,12 @@ public interface IExecutionMiddleware
     /// <summary>
     /// Executes middleware behavior around the next execution delegate.
     /// </summary>
+    /// <param name="context">The current node execution context.</param>
     /// <param name="next">The next delegate in the execution pipeline.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <returns>The node execution result.</returns>
     Task<NodeExecutionResult> ExecuteAsync(
-        Func<CancellationToken, Task<NodeExecutionResult>> next,
+        NodeExecutionContext context,
+        Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>> next,
         CancellationToken cancellationToken);
 }

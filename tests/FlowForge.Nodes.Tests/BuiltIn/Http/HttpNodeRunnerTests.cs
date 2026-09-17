@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Execution;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -249,13 +250,15 @@ public sealed class HttpNodeRunnerTests
 
         return new NodeExecutionContext
         {
-            Node = new NodeDefinition
+            NodeDefinition = new NodeDefinition
             {
                 Id = new NodeId(Guid.NewGuid()),
                 Type = "http",
                 Configuration = configuration
             },
-            ExecutionId = new WorkflowExecutionId(Guid.NewGuid())
+            WorkflowExecutionId = new WorkflowExecutionId(Guid.NewGuid()),
+            NodeExecutionId = new NodeExecutionId(Guid.NewGuid()),
+            AttemptNumber = 1
         };
     }
 

@@ -32,13 +32,16 @@ public sealed class ExecutionPipeline
     /// <summary>
     /// Executes the configured middleware and terminal delegate.
     /// </summary>
+    /// <param name="context">The current node execution context.</param>
     /// <param name="terminal">The terminal node execution delegate.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <returns>The node execution result.</returns>
     public Task<NodeExecutionResult> ExecuteAsync(
-        Func<CancellationToken, Task<NodeExecutionResult>> terminal,
+        NodeExecutionContext context,
+        Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>> terminal,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(terminal);
 
         var execution = terminal;
@@ -47,9 +50,9 @@ public sealed class ExecutionPipeline
         {
             var middleware = _middlewares[index];
             var next = execution;
-            execution = token => middleware.ExecuteAsync(next, token);
+            execution = (currentContext, token) => middleware.ExecuteAsync(currentContext, next, token);
         }
 
-        return execution(cancellationToken);
+        return execution(context, cancellationToken);
     }
 }

@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
@@ -144,11 +145,14 @@ public sealed class WorkflowExecutor
 
         var context = new NodeExecutionContext
         {
-            Node = node,
-            ExecutionId = executionId
+            NodeDefinition = node,
+            WorkflowExecutionId = executionId,
+            NodeExecutionId = nodeExecution.Id,
+            AttemptNumber = 1
         };
         var result = await _executionPipeline.ExecuteAsync(
-            token => runner.ExecuteAsync(context, token),
+            context,
+            (currentContext, token) => runner.ExecuteAsync(currentContext, token),
             cancellationToken);
 
         var completedNodeExecution = nodeExecution with

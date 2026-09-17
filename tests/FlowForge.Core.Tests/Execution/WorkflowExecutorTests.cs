@@ -39,8 +39,10 @@ public sealed class WorkflowExecutorTests
 
         var context = Assert.Single(contexts);
         var nodeState = Assert.Single(execution.Nodes);
-        Assert.Equal(node.Id, context.Node.Id);
-        Assert.Equal(execution.Id, context.ExecutionId);
+        Assert.Equal(node.Id, context.NodeDefinition.Id);
+        Assert.Equal(execution.Id, context.WorkflowExecutionId);
+        Assert.Equal(nodeState.Id, context.NodeExecutionId);
+        Assert.Equal(1, context.AttemptNumber);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
         Assert.Equal(NodeExecutionStatus.Succeeded, nodeState.Status);
         Assert.NotNull(execution.StartedAt);
@@ -63,7 +65,7 @@ public sealed class WorkflowExecutorTests
             "test",
             (context, _) =>
             {
-                executionOrder.Enqueue(context.Node.Id);
+                executionOrder.Enqueue(context.NodeDefinition.Id);
                 return Task.FromResult(Succeeded());
             }));
         var workflow = Workflow(
@@ -93,17 +95,17 @@ public sealed class WorkflowExecutorTests
             "test",
             async (context, cancellationToken) =>
             {
-                if (context.Node.Id == nodeB.Id)
+                if (context.NodeDefinition.Id == nodeB.Id)
                 {
                     nodeBStarted.TrySetResult();
                     await releaseParallelLayer.Task.WaitAsync(cancellationToken);
                 }
-                else if (context.Node.Id == nodeC.Id)
+                else if (context.NodeDefinition.Id == nodeC.Id)
                 {
                     nodeCStarted.TrySetResult();
                     await releaseParallelLayer.Task.WaitAsync(cancellationToken);
                 }
-                else if (context.Node.Id == nodeD.Id)
+                else if (context.NodeDefinition.Id == nodeD.Id)
                 {
                     Interlocked.Increment(ref nodeDInvocationCount);
                 }
@@ -176,9 +178,9 @@ public sealed class WorkflowExecutorTests
             "test",
             (context, _) =>
             {
-                invocations.Enqueue(context.Node.Id);
+                invocations.Enqueue(context.NodeDefinition.Id);
                 return Task.FromResult(
-                    context.Node.Id == nodeA.Id
+                    context.NodeDefinition.Id == nodeA.Id
                         ? Failed("Node failed.")
                         : Succeeded());
             }));
@@ -210,22 +212,32 @@ public sealed class WorkflowExecutorTests
     public async Task ExecuteAsync_RetryPolicy_FirstFailureThenSuccess_SucceedsWorkflow()
     {
         var attempts = 0;
+        var contexts = new List<NodeExecutionContext>();
         var stateStore = new InMemoryStateStore();
         var engine = CreateEngine(
             stateStore,
             [new RetryNodeExecutionPolicy(2, TimeSpan.Zero)],
             new FakeNodeRunner(
                 "test",
-                (_, _) => Task.FromResult(
-                    Interlocked.Increment(ref attempts) == 1
+                (context, _) =>
+                {
+                    contexts.Add(context);
+                    return Task.FromResult(Interlocked.Increment(ref attempts) == 1
                         ? Failed("External failure.", NodeFailureCategory.External)
-                        : Succeeded())));
+                        : Succeeded());
+                }));
 
         var execution = await engine.ExecuteAsync(
             Workflow([Node(1)]),
             CancellationToken.None);
 
         Assert.Equal(2, attempts);
+        Assert.Equal([1, 2], contexts.Select(context => context.AttemptNumber));
+        Assert.All(contexts, context =>
+        {
+            Assert.Equal(execution.Id, context.WorkflowExecutionId);
+            Assert.Equal(Assert.Single(execution.Nodes).Id, context.NodeExecutionId);
+        });
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
         Assert.Equal(NodeExecutionStatus.Succeeded, Assert.Single(execution.Nodes).Status);
     }

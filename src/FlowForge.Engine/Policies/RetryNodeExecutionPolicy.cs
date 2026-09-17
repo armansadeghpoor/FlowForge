@@ -35,9 +35,11 @@ public sealed class RetryNodeExecutionPolicy : IExecutionMiddleware
 
     /// <inheritdoc />
     public async Task<NodeExecutionResult> ExecuteAsync(
-        Func<CancellationToken, Task<NodeExecutionResult>> next,
+        NodeExecutionContext context,
+        Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>> next,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(next);
 
         var delay = _initialDelay;
@@ -46,7 +48,8 @@ public sealed class RetryNodeExecutionPolicy : IExecutionMiddleware
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var result = await next(cancellationToken);
+            var attemptContext = context with { AttemptNumber = attempt };
+            var result = await next(attemptContext, cancellationToken);
             if (result.Success || !IsRetryable(result) || attempt == _maxAttempts)
             {
                 return result;

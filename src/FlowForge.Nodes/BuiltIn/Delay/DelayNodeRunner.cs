@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Execution;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using FlowForge.Abstractions.Nodes;
@@ -40,7 +41,7 @@ public sealed class DelayNodeRunner : INodeRunner
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!context.Node.Configuration.TryGetValue("durationMs", out var durationElement))
+        if (!context.NodeDefinition.Configuration.TryGetValue("durationMs", out var durationElement))
         {
             return Failure("Delay node configuration requires 'durationMs'.");
         }
