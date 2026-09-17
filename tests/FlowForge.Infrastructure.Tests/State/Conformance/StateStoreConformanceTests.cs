@@ -11,7 +11,7 @@ public abstract class StateStoreConformanceTests
 {
     protected abstract IStateStore CreateStore();
 
-    [Fact]
+    [SkippableFact]
     public async Task CreateExecutionAsync_StoresRetrievableExecution()
     {
         var store = CreateStore();
@@ -30,7 +30,7 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(execution.Nodes, retrieved.Nodes);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task CreateExecutionAsync_DuplicateId_ThrowsInvalidOperationException()
     {
         var store = CreateStore();
@@ -43,7 +43,7 @@ public abstract class StateStoreConformanceTests
         Assert.Contains(execution.Id.Value.ToString(), exception.Message);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetExecutionAsync_IncludesSavedNodeExecutions()
     {
         var store = CreateStore();
@@ -62,7 +62,7 @@ public abstract class StateStoreConformanceTests
         Assert.Contains(secondNode, retrieved.Nodes);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SaveNodeExecutionAsync_SameId_ReplacesStoredNodeExecution()
     {
         var store = CreateStore();
@@ -89,7 +89,7 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(replacement, Assert.Single(aggregate.Nodes));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SaveNodeExecutionAsync_PreservesFailureCategoryAndMessage()
     {
         var store = CreateStore();
@@ -117,7 +117,7 @@ public abstract class StateStoreConformanceTests
         Assert.Equal("External service unavailable.", retrieved.Failure?.Message);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SaveNodeExecutionAsync_PreservesAttemptNumber()
     {
         var store = CreateStore();
@@ -140,7 +140,7 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(2, retrieved.RetryCount);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task SaveNodeExecutionAsync_MissingWorkflow_ThrowsKeyNotFoundException()
     {
         var store = CreateStore();
@@ -159,7 +159,7 @@ public abstract class StateStoreConformanceTests
             CancellationToken.None));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetExecutionAsync_MissingWorkflow_ReturnsNull()
     {
         var store = CreateStore();
@@ -171,7 +171,7 @@ public abstract class StateStoreConformanceTests
         Assert.Null(retrieved);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetNodeExecutionAsync_MissingNode_ReturnsNull()
     {
         var store = CreateStore();
@@ -186,7 +186,7 @@ public abstract class StateStoreConformanceTests
         Assert.Null(retrieved);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task UpdateWorkflowStatusAsync_ReplacesStatusAndLifecycleTimestamps()
     {
         var store = CreateStore();
