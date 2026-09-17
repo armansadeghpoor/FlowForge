@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
@@ -15,20 +16,25 @@ public sealed class WorkflowExecutor
 {
     private readonly INodeRunnerRegistry _nodeRunnerRegistry;
     private readonly IStateStore _stateStore;
+    private readonly INodeExecutionPolicy _nodeExecutionPolicy;
 
     /// <summary>
     /// Initializes a new workflow executor.
     /// </summary>
     /// <param name="nodeRunnerRegistry">The registry used to resolve node runners.</param>
     /// <param name="stateStore">The store used to persist execution state.</param>
+    /// <param name="nodeExecutionPolicy">The policy used to execute node runners.</param>
     public WorkflowExecutor(
         INodeRunnerRegistry nodeRunnerRegistry,
-        IStateStore stateStore)
+        IStateStore stateStore,
+        INodeExecutionPolicy nodeExecutionPolicy)
     {
         ArgumentNullException.ThrowIfNull(nodeRunnerRegistry);
         ArgumentNullException.ThrowIfNull(stateStore);
+        ArgumentNullException.ThrowIfNull(nodeExecutionPolicy);
         _nodeRunnerRegistry = nodeRunnerRegistry;
         _stateStore = stateStore;
+        _nodeExecutionPolicy = nodeExecutionPolicy;
     }
 
     /// <summary>
@@ -137,12 +143,13 @@ public sealed class WorkflowExecutor
             return failedNodeExecution;
         }
 
-        var result = await runner.ExecuteAsync(
-            new NodeExecutionContext
-            {
-                Node = node,
-                ExecutionId = executionId
-            },
+        var context = new NodeExecutionContext
+        {
+            Node = node,
+            ExecutionId = executionId
+        };
+        var result = await _nodeExecutionPolicy.ExecuteAsync(
+            token => runner.ExecuteAsync(context, token),
             cancellationToken);
 
         var completedNodeExecution = nodeExecution with

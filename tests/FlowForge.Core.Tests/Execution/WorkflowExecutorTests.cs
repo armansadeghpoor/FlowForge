@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Failures;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Engine.Execution;
+using FlowForge.Engine.Policies;
 using FlowForge.Infrastructure.State;
 
 namespace FlowForge.Core.Tests.Execution;
@@ -204,10 +206,46 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(NodeExecutionStatus.Failed, storedNode.Status);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_RetryPolicy_FirstFailureThenSuccess_SucceedsWorkflow()
+    {
+        var attempts = 0;
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(
+            stateStore,
+            new RetryNodeExecutionPolicy(2, TimeSpan.Zero),
+            new FakeNodeRunner(
+                "test",
+                (_, _) => Task.FromResult(
+                    Interlocked.Increment(ref attempts) == 1
+                        ? Failed("External failure.", NodeFailureCategory.External)
+                        : Succeeded())));
+
+        var execution = await engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            CancellationToken.None);
+
+        Assert.Equal(2, attempts);
+        Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
+        Assert.Equal(NodeExecutionStatus.Succeeded, Assert.Single(execution.Nodes).Status);
+    }
+
     private static WorkflowEngine CreateEngine(
         InMemoryStateStore stateStore,
         params INodeRunner[] runners) =>
-        new(new WorkflowExecutor(new FakeNodeRunnerRegistry(runners), stateStore));
+        CreateEngine(
+            stateStore,
+            new RetryNodeExecutionPolicy(1, TimeSpan.Zero),
+            runners);
+
+    private static WorkflowEngine CreateEngine(
+        InMemoryStateStore stateStore,
+        INodeExecutionPolicy nodeExecutionPolicy,
+        params INodeRunner[] runners) =>
+        new(new WorkflowExecutor(
+            new FakeNodeRunnerRegistry(runners),
+            stateStore,
+            nodeExecutionPolicy));
 
     private static NodeDefinition Node(int value, string type = "test") =>
         new()
@@ -243,14 +281,16 @@ public sealed class WorkflowExecutorTests
             Failure = null
         };
 
-    private static NodeExecutionResult Failed(string message) =>
+    private static NodeExecutionResult Failed(
+        string message,
+        NodeFailureCategory category = NodeFailureCategory.Execution) =>
         new()
         {
             Success = false,
             Output = null,
             Failure = new NodeFailure
             {
-                Category = NodeFailureCategory.Execution,
+                Category = category,
                 Message = message
             }
         };

@@ -3,6 +3,7 @@ using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Engine.Execution;
+using FlowForge.Engine.Policies;
 using FlowForge.Infrastructure.State;
 using FlowForge.Nodes.BuiltIn.Delay;
 using FlowForge.Nodes.Registry;
@@ -17,7 +18,10 @@ public sealed class DelayWorkflowExecutionTests
         var delayRunner = new DelayNodeRunner();
         var registry = new NodeRunnerRegistry([delayRunner]);
         var stateStore = new InMemoryStateStore();
-        var engine = new WorkflowEngine(new WorkflowExecutor(registry, stateStore));
+        var engine = new WorkflowEngine(new WorkflowExecutor(
+            registry,
+            stateStore,
+            new RetryNodeExecutionPolicy(1, TimeSpan.Zero)));
         var workflow = new WorkflowDefinition
         {
             Id = new WorkflowId(Guid.NewGuid()),
