@@ -1,5 +1,6 @@
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
+using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 
 namespace FlowForge.Abstractions.State;
@@ -75,6 +76,28 @@ public interface IStateStore
     Task<bool> TryClaimExecutionAsync(
         WorkflowExecutionId id,
         string ownerId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Appends an immutable audit entry to workflow execution history.
+    /// Existing history is never replaced.
+    /// </summary>
+    /// <param name="entry">The history entry to append.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <exception cref="KeyNotFoundException">The workflow execution does not exist.</exception>
+    Task AppendExecutionHistoryAsync(
+        ExecutionHistoryEntry entry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets workflow execution history in timestamp order, preserving append order
+    /// for entries with the same timestamp.
+    /// </summary>
+    /// <param name="executionId">The workflow execution identifier.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>The ordered history, or an empty collection when no history exists.</returns>
+    Task<IReadOnlyList<ExecutionHistoryEntry>> GetExecutionHistoryAsync(
+        WorkflowExecutionId executionId,
         CancellationToken cancellationToken);
 
     /// <summary>

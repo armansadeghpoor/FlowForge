@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
+using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 
 namespace FlowForge.Infrastructure.State;
@@ -12,6 +13,9 @@ namespace FlowForge.Infrastructure.State;
 public sealed class InMemoryStateStore : IStateStore
 {
     private readonly ConcurrentDictionary<WorkflowExecutionId, WorkflowExecution> _executions = new();
+    private readonly ConcurrentDictionary<
+        WorkflowExecutionId,
+        ConcurrentQueue<ExecutionHistoryEntry>> _history = new();
 
     /// <inheritdoc />
     public Task CreateExecutionAsync(
@@ -129,6 +133,56 @@ public sealed class InMemoryStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public Task AppendExecutionHistoryAsync(
+        ExecutionHistoryEntry entry,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!_executions.ContainsKey(entry.WorkflowExecutionId))
+        {
+            throw new KeyNotFoundException(
+                $"Workflow execution '{entry.WorkflowExecutionId.Value}' was not found.");
+        }
+
+        var history = _history.GetOrAdd(
+            entry.WorkflowExecutionId,
+            static _ => new ConcurrentQueue<ExecutionHistoryEntry>());
+        history.Enqueue(Snapshot(entry));
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ExecutionHistoryEntry>> GetExecutionHistoryAsync(
+        WorkflowExecutionId executionId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!_history.TryGetValue(executionId, out var history))
+        {
+            return Task.FromResult<IReadOnlyList<ExecutionHistoryEntry>>(
+                Array.Empty<ExecutionHistoryEntry>());
+        }
+
+        IReadOnlyList<ExecutionHistoryEntry> entries = Array.AsReadOnly(
+            history
+                .ToArray()
+                .Select((entry, appendOrder) => new
+                {
+                    Entry = Snapshot(entry),
+                    AppendOrder = appendOrder
+                })
+                .OrderBy(item => item.Entry.Timestamp)
+                .ThenBy(item => item.AppendOrder)
+                .Select(item => item.Entry)
+                .ToArray());
+
+        return Task.FromResult(entries);
+    }
+
+    /// <inheritdoc />
     public Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
@@ -197,5 +251,11 @@ public sealed class InMemoryStateStore : IStateStore
         execution with
         {
             Nodes = Array.AsReadOnly(execution.Nodes.ToArray())
+        };
+
+    private static ExecutionHistoryEntry Snapshot(ExecutionHistoryEntry entry) =>
+        entry with
+        {
+            Metadata = entry.Metadata is { } metadata ? metadata.Clone() : null
         };
 }

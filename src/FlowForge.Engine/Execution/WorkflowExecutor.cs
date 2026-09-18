@@ -5,6 +5,7 @@ using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
 using FlowForge.Core.Domain.Failures;
+using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Graph;
 
@@ -75,6 +76,18 @@ public sealed class WorkflowExecutor
             Nodes = Array.Empty<NodeExecutionState>()
         };
         await _stateStore.CreateExecutionAsync(execution, cancellationToken);
+        await AppendHistoryAsync(
+            execution.Id,
+            null,
+            ExecutionHistoryEventType.WorkflowCreated,
+            execution.CreatedAt,
+            cancellationToken);
+        await AppendHistoryAsync(
+            execution.Id,
+            null,
+            ExecutionHistoryEventType.WorkflowStarted,
+            startedAt,
+            cancellationToken);
 
         var nodesById = workflow.Nodes.ToDictionary(node => node.Id);
         var nodeStates = new List<NodeExecutionState>();
@@ -137,14 +150,21 @@ public sealed class WorkflowExecutor
             executionId,
             nodeExecution,
             cancellationToken);
+        await AppendHistoryAsync(
+            executionId,
+            nodeExecution.Id,
+            ExecutionHistoryEventType.NodeStarted,
+            startedAt,
+            cancellationToken);
 
         var runner = _nodeRunnerRegistry.Get(node.Type);
         if (runner is null)
         {
+            var missingRunnerCompletedAt = DateTime.UtcNow;
             var failedNodeExecution = nodeExecution with
             {
                 Status = NodeExecutionStatus.Failed,
-                CompletedAt = DateTime.UtcNow,
+                CompletedAt = missingRunnerCompletedAt,
                 Failure = new NodeFailure
                 {
                     Category = NodeFailureCategory.Configuration,
@@ -154,6 +174,12 @@ public sealed class WorkflowExecutor
             await _stateStore.SaveNodeExecutionAsync(
                 executionId,
                 failedNodeExecution,
+                cancellationToken);
+            await AppendHistoryAsync(
+                executionId,
+                failedNodeExecution.Id,
+                ExecutionHistoryEventType.NodeFailed,
+                missingRunnerCompletedAt,
                 cancellationToken);
 
             return failedNodeExecution;
@@ -177,18 +203,27 @@ public sealed class WorkflowExecutor
             },
             cancellationToken);
 
+        var completedAt = DateTime.UtcNow;
         var completedNodeExecution = nodeExecution with
         {
             Status = result.Success
                 ? NodeExecutionStatus.Succeeded
                 : NodeExecutionStatus.Failed,
-            CompletedAt = DateTime.UtcNow,
+            CompletedAt = completedAt,
             Output = result.Output,
             Failure = result.Failure
         };
         await _stateStore.SaveNodeExecutionAsync(
             executionId,
             completedNodeExecution,
+            cancellationToken);
+        await AppendHistoryAsync(
+            executionId,
+            completedNodeExecution.Id,
+            result.Success
+                ? ExecutionHistoryEventType.NodeCompleted
+                : ExecutionHistoryEventType.NodeFailed,
+            completedAt,
             cancellationToken);
 
         return completedNodeExecution;
@@ -207,6 +242,20 @@ public sealed class WorkflowExecutor
             execution.StartedAt,
             completedAt,
             cancellationToken);
+        await AppendHistoryAsync(
+            execution.Id,
+            null,
+            status switch
+            {
+                WorkflowExecutionStatus.Succeeded =>
+                    ExecutionHistoryEventType.WorkflowCompleted,
+                WorkflowExecutionStatus.Failed =>
+                    ExecutionHistoryEventType.WorkflowFailed,
+                _ => throw new InvalidOperationException(
+                    $"Cannot record completion history for workflow status '{status}'.")
+            },
+            completedAt,
+            cancellationToken);
 
         return execution with
         {
@@ -215,4 +264,22 @@ public sealed class WorkflowExecutor
             Nodes = Array.AsReadOnly(nodeStates.ToArray())
         };
     }
+
+    private Task AppendHistoryAsync(
+        WorkflowExecutionId workflowExecutionId,
+        NodeExecutionId? nodeExecutionId,
+        ExecutionHistoryEventType eventType,
+        DateTime timestamp,
+        CancellationToken cancellationToken) =>
+        _stateStore.AppendExecutionHistoryAsync(
+            new ExecutionHistoryEntry
+            {
+                Id = new ExecutionHistoryId(Guid.NewGuid()),
+                WorkflowExecutionId = workflowExecutionId,
+                NodeExecutionId = nodeExecutionId,
+                EventType = eventType,
+                Timestamp = timestamp,
+                Metadata = null
+            },
+            cancellationToken);
 }

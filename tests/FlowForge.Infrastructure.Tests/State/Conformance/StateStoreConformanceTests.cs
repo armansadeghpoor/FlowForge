@@ -1,7 +1,9 @@
+using System.Text.Json;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
 using FlowForge.Core.Domain.Failures;
+using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Domain.Values;
 
@@ -591,6 +593,134 @@ public abstract class StateStoreConformanceTests
         Assert.Equal("v2", retrievedSecond.DefinitionVersion);
     }
 
+    [SkippableFact]
+    public async Task AppendExecutionHistoryAsync_AppendsAndReadsHistory()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution();
+        var entry = CreateHistoryEntry(
+            execution,
+            ExecutionHistoryEventType.WorkflowCreated,
+            Timestamp);
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        await store.AppendExecutionHistoryAsync(entry, CancellationToken.None);
+        var history = await store.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(entry, Assert.Single(history));
+    }
+
+    [SkippableFact]
+    public async Task GetExecutionHistoryAsync_OrdersByTimestampThenAppendOrder()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution();
+        var completed = CreateHistoryEntry(
+            execution,
+            ExecutionHistoryEventType.WorkflowCompleted,
+            Timestamp.AddMinutes(1));
+        var created = CreateHistoryEntry(
+            execution,
+            ExecutionHistoryEventType.WorkflowCreated,
+            Timestamp);
+        var started = CreateHistoryEntry(
+            execution,
+            ExecutionHistoryEventType.WorkflowStarted,
+            Timestamp);
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        await store.AppendExecutionHistoryAsync(completed, CancellationToken.None);
+        await store.AppendExecutionHistoryAsync(created, CancellationToken.None);
+        await store.AppendExecutionHistoryAsync(started, CancellationToken.None);
+        var history = await store.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [created.Id, started.Id, completed.Id],
+            history.Select(entry => entry.Id));
+    }
+
+    [SkippableFact]
+    public async Task GetExecutionHistoryAsync_IsolatesExecutions()
+    {
+        var store = CreateStore();
+        var firstExecution = CreateExecution();
+        var secondExecution = CreateExecution();
+        var firstEntry = CreateHistoryEntry(
+            firstExecution,
+            ExecutionHistoryEventType.WorkflowCreated,
+            Timestamp);
+        var secondEntry = CreateHistoryEntry(
+            secondExecution,
+            ExecutionHistoryEventType.WorkflowCreated,
+            Timestamp);
+        await store.CreateExecutionAsync(firstExecution, CancellationToken.None);
+        await store.CreateExecutionAsync(secondExecution, CancellationToken.None);
+        await store.AppendExecutionHistoryAsync(firstEntry, CancellationToken.None);
+        await store.AppendExecutionHistoryAsync(secondEntry, CancellationToken.None);
+
+        var firstHistory = await store.GetExecutionHistoryAsync(
+            firstExecution.Id,
+            CancellationToken.None);
+        var secondHistory = await store.GetExecutionHistoryAsync(
+            secondExecution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(firstEntry, Assert.Single(firstHistory));
+        Assert.Equal(secondEntry, Assert.Single(secondHistory));
+    }
+
+    [SkippableFact]
+    public async Task GetExecutionHistoryAsync_NoHistory_ReturnsEmptyCollection()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution();
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var history = await store.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Empty(history);
+    }
+
+    [SkippableFact]
+    public async Task AppendExecutionHistoryAsync_MetadataRoundTrips()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution();
+        var nodeExecutionId = new NodeExecutionId(Guid.NewGuid());
+        var metadata = JsonSerializer.SerializeToElement(new
+        {
+            attemptNumber = 2,
+            detail = "audit detail"
+        });
+        var entry = CreateHistoryEntry(
+            execution,
+            ExecutionHistoryEventType.NodeFailed,
+            Timestamp,
+            nodeExecutionId,
+            metadata);
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        await store.AppendExecutionHistoryAsync(entry, CancellationToken.None);
+        var history = await store.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        var retrieved = Assert.Single(history);
+        Assert.Equal(entry.Id, retrieved.Id);
+        Assert.Equal(nodeExecutionId, retrieved.NodeExecutionId);
+        Assert.Equal(ExecutionHistoryEventType.NodeFailed, retrieved.EventType);
+        Assert.Equal(2, retrieved.Metadata?.GetProperty("attemptNumber").GetInt32());
+        Assert.Equal(
+            "audit detail",
+            retrieved.Metadata?.GetProperty("detail").GetString());
+    }
+
     protected static WorkflowExecution CreateExecution() =>
         new()
         {
@@ -618,6 +748,22 @@ public abstract class StateStoreConformanceTests
             CompletedAt = null,
             Output = new NodeOutput { Value = "node output" },
             Failure = null
+        };
+
+    private static ExecutionHistoryEntry CreateHistoryEntry(
+        WorkflowExecution execution,
+        ExecutionHistoryEventType eventType,
+        DateTime timestamp,
+        NodeExecutionId? nodeExecutionId = null,
+        JsonElement? metadata = null) =>
+        new()
+        {
+            Id = new ExecutionHistoryId(Guid.NewGuid()),
+            WorkflowExecutionId = execution.Id,
+            NodeExecutionId = nodeExecutionId,
+            EventType = eventType,
+            Timestamp = timestamp,
+            Metadata = metadata
         };
 
     private static DateTime Timestamp { get; } =

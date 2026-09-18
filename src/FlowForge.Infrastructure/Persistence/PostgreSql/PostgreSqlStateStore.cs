@@ -5,6 +5,7 @@ using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
 using FlowForge.Core.Domain.Failures;
+using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Domain.Values;
 using Npgsql;
@@ -53,6 +54,16 @@ public sealed class PostgreSqlStateStore : IStateStore
             failure = EXCLUDED.failure,
             started_at = EXCLUDED.started_at,
             completed_at = EXCLUDED.completed_at;
+        """;
+
+    private const string InsertHistorySql =
+        """
+        INSERT INTO execution_history
+            (id, workflow_execution_id, node_execution_id, event_type,
+             occurred_at, metadata)
+        VALUES
+            (@Id, @WorkflowExecutionId, @NodeExecutionId, @EventType,
+             @Timestamp, CAST(@Metadata AS jsonb));
         """;
 
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
@@ -311,6 +322,70 @@ public sealed class PostgreSqlStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public async Task AppendExecutionHistoryAsync(
+        ExecutionHistoryEntry entry,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                InsertHistorySql,
+                new
+                {
+                    Id = entry.Id.Value,
+                    WorkflowExecutionId = entry.WorkflowExecutionId.Value,
+                    NodeExecutionId = entry.NodeExecutionId?.Value,
+                    EventType = entry.EventType.ToString(),
+                    Timestamp = ToDatabaseTimestamp(entry.Timestamp),
+                    Metadata = entry.Metadata?.GetRawText()
+                },
+                cancellationToken: cancellationToken));
+        }
+        catch (PostgresException exception)
+            when (exception.SqlState == PostgresErrorCodes.ForeignKeyViolation &&
+                  exception.ConstraintName == "fk_execution_history_workflow_executions")
+        {
+            throw new KeyNotFoundException(
+                $"Workflow execution '{entry.WorkflowExecutionId.Value}' was not found.",
+                exception);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ExecutionHistoryEntry>> GetExecutionHistoryAsync(
+        WorkflowExecutionId executionId,
+        CancellationToken cancellationToken)
+    {
+        const string sql =
+            """
+            SELECT id AS Id,
+                   workflow_execution_id AS WorkflowExecutionId,
+                   node_execution_id AS NodeExecutionId,
+                   event_type AS EventType,
+                   occurred_at AS Timestamp,
+                   metadata::text AS Metadata
+            FROM execution_history
+            WHERE workflow_execution_id = @WorkflowExecutionId
+            ORDER BY occurred_at, append_sequence;
+            """;
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        var rows = await connection.QueryAsync<ExecutionHistoryRow>(new CommandDefinition(
+            sql,
+            new { WorkflowExecutionId = executionId.Value },
+            cancellationToken: cancellationToken));
+        var entries = rows.Select(MapExecutionHistory).ToArray();
+
+        return Array.AsReadOnly(entries);
+    }
+
+    /// <inheritdoc />
     public async Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
@@ -487,6 +562,30 @@ public sealed class PostgreSqlStateStore : IStateStore
             Failure = DeserializeFailure(row.Failure)
         };
 
+    private static ExecutionHistoryEntry MapExecutionHistory(ExecutionHistoryRow row) =>
+        new()
+        {
+            Id = new ExecutionHistoryId(row.Id),
+            WorkflowExecutionId = new WorkflowExecutionId(row.WorkflowExecutionId),
+            NodeExecutionId = row.NodeExecutionId is { } nodeExecutionId
+                ? new NodeExecutionId(nodeExecutionId)
+                : null,
+            EventType = ParseStatus<ExecutionHistoryEventType>(row.EventType),
+            Timestamp = FromDatabaseTimestamp(row.Timestamp),
+            Metadata = DeserializeHistoryMetadata(row.Metadata)
+        };
+
+    private static JsonElement? DeserializeHistoryMetadata(string? json)
+    {
+        if (json is null)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
     private static string? SerializeOutput(NodeOutput? output) =>
         output is null ? null : JsonSerializer.Serialize(output.Value, JsonOptions);
 
@@ -597,5 +696,20 @@ public sealed class PostgreSqlStateStore : IStateStore
         public DateTime? StartedAt { get; init; }
 
         public DateTime? CompletedAt { get; init; }
+    }
+
+    private sealed class ExecutionHistoryRow
+    {
+        public Guid Id { get; init; }
+
+        public Guid WorkflowExecutionId { get; init; }
+
+        public Guid? NodeExecutionId { get; init; }
+
+        public string? EventType { get; init; }
+
+        public DateTime Timestamp { get; init; }
+
+        public string? Metadata { get; init; }
     }
 }

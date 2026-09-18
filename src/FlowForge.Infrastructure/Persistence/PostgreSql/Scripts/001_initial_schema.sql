@@ -29,3 +29,20 @@ CREATE TABLE node_executions
 
 CREATE INDEX ix_node_executions_workflow_execution_id
     ON node_executions (workflow_execution_id);
+
+CREATE TABLE execution_history
+(
+    id UUID PRIMARY KEY,
+    workflow_execution_id UUID NOT NULL,
+    node_execution_id UUID NULL,
+    event_type VARCHAR(32) NOT NULL,
+    occurred_at TIMESTAMP NOT NULL,
+    metadata JSONB NULL,
+    append_sequence BIGINT GENERATED ALWAYS AS IDENTITY,
+    CONSTRAINT fk_execution_history_workflow_executions
+        FOREIGN KEY (workflow_execution_id)
+        REFERENCES workflow_executions (id)
+);
+
+CREATE INDEX ix_execution_history_workflow_execution_id
+    ON execution_history (workflow_execution_id, occurred_at, append_sequence);

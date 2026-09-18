@@ -37,6 +37,9 @@ public sealed class WorkflowExecutorTests
             execution.Id,
             execution.Nodes[0].Id,
             CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
 
         var context = Assert.Single(contexts);
         var nodeState = Assert.Single(execution.Nodes);
@@ -56,6 +59,19 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(nodeState, Assert.Single(storedExecution.Nodes));
         Assert.NotNull(storedNode);
         Assert.Equal(NodeExecutionStatus.Succeeded, storedNode.Status);
+        Assert.Equal(
+            [
+                ExecutionHistoryEventType.WorkflowCreated,
+                ExecutionHistoryEventType.WorkflowStarted,
+                ExecutionHistoryEventType.NodeStarted,
+                ExecutionHistoryEventType.NodeCompleted,
+                ExecutionHistoryEventType.WorkflowCompleted
+            ],
+            history.Select(entry => entry.EventType));
+        Assert.Equal(
+            nodeState.Id,
+            history.Single(entry => entry.EventType == ExecutionHistoryEventType.NodeStarted)
+                .NodeExecutionId);
     }
 
     [Fact]
@@ -159,6 +175,9 @@ public sealed class WorkflowExecutorTests
             execution.Id,
             execution.Nodes[0].Id,
             CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
 
         var nodeState = Assert.Single(execution.Nodes);
         Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
@@ -172,6 +191,13 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(NodeExecutionStatus.Failed, storedNode.Status);
         Assert.Equal(nodeState.Failure, storedNode.Failure);
         Assert.Equal(nodeState, Assert.Single(storedExecution.Nodes));
+        Assert.Contains(
+            history,
+            entry => entry.EventType == ExecutionHistoryEventType.NodeFailed &&
+                     entry.NodeExecutionId == nodeState.Id);
+        Assert.Equal(
+            ExecutionHistoryEventType.WorkflowFailed,
+            history[^1].EventType);
     }
 
     [Fact]
