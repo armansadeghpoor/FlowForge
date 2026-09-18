@@ -100,6 +100,35 @@ public sealed class InMemoryStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public Task<bool> TryClaimExecutionAsync(
+        WorkflowExecutionId id,
+        string ownerId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ownerId);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        while (_executions.TryGetValue(id, out var current))
+        {
+            if (current.Status != WorkflowExecutionStatus.Running || current.OwnerId is not null)
+            {
+                return Task.FromResult(false);
+            }
+
+            var claimed = current with { OwnerId = ownerId };
+            if (_executions.TryUpdate(id, claimed, current))
+            {
+                return Task.FromResult(true);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        throw new KeyNotFoundException(
+            $"Workflow execution '{id.Value}' was not found.");
+    }
+
+    /// <inheritdoc />
     public Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,

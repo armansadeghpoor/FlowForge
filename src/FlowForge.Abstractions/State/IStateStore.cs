@@ -62,6 +62,22 @@ public interface IStateStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Attempts to assign an owner to an unowned running workflow execution.
+    /// </summary>
+    /// <param name="id">The workflow execution identifier.</param>
+    /// <param name="ownerId">The owner identifier to assign.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>
+    /// <see langword="true"/> when ownership is acquired; otherwise,
+    /// <see langword="false"/> when the execution is already owned or is not running.
+    /// </returns>
+    /// <exception cref="KeyNotFoundException">The workflow execution does not exist.</exception>
+    Task<bool> TryClaimExecutionAsync(
+        WorkflowExecutionId id,
+        string ownerId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Saves a node snapshot within an existing workflow execution. A save replaces
     /// the entire node state with the same node execution identifier within that workflow,
     /// or adds it when absent. The last applied save wins.

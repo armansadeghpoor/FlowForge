@@ -397,6 +397,137 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(nodeExecution, Assert.Single(staleExecution.Nodes));
     }
 
+    [SkippableFact]
+    public async Task TryClaimExecutionAsync_UnownedRunningExecution_AcquiresOwnership()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with { Status = WorkflowExecutionStatus.Running };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var claimed = await store.TryClaimExecutionAsync(
+            execution.Id,
+            "worker-claim-01",
+            CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.True(claimed);
+        Assert.NotNull(retrieved);
+        Assert.Equal("worker-claim-01", retrieved.OwnerId);
+    }
+
+    [SkippableFact]
+    public async Task TryClaimExecutionAsync_AlreadyOwnedExecution_ReturnsFalse()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with { Status = WorkflowExecutionStatus.Running };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        var firstClaim = await store.TryClaimExecutionAsync(
+            execution.Id,
+            "worker-existing",
+            CancellationToken.None);
+
+        var duplicateClaim = await store.TryClaimExecutionAsync(
+            execution.Id,
+            "worker-contender",
+            CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.True(firstClaim);
+        Assert.False(duplicateClaim);
+        Assert.NotNull(retrieved);
+        Assert.Equal("worker-existing", retrieved.OwnerId);
+    }
+
+    [SkippableFact]
+    public async Task TryClaimExecutionAsync_ConcurrentClaims_OnlyOneAcquiresOwnership()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with { Status = WorkflowExecutionStatus.Running };
+        var ownerIds = Enumerable.Range(1, 16)
+            .Select(index => $"worker-{index:00}")
+            .ToArray();
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var start = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var claimTasks = ownerIds.Select(async ownerId =>
+        {
+            await start.Task;
+            var claimed = await store.TryClaimExecutionAsync(
+                execution.Id,
+                ownerId,
+                CancellationToken.None);
+            return (OwnerId: ownerId, Claimed: claimed);
+        }).ToArray();
+        start.SetResult(true);
+
+        var claims = await Task.WhenAll(claimTasks);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        var winner = Assert.Single(claims, claim => claim.Claimed);
+        Assert.NotNull(retrieved);
+        Assert.Equal(winner.OwnerId, retrieved.OwnerId);
+    }
+
+    [SkippableFact]
+    public async Task TryClaimExecutionAsync_MissingExecution_ThrowsKeyNotFoundException()
+    {
+        var store = CreateStore();
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => store.TryClaimExecutionAsync(
+                new WorkflowExecutionId(Guid.NewGuid()),
+                "worker-missing",
+                CancellationToken.None));
+    }
+
+    [SkippableFact]
+    public async Task TryClaimExecutionAsync_CompletedExecution_ReturnsFalse()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Succeeded,
+            CompletedAt = Timestamp
+        };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var claimed = await store.TryClaimExecutionAsync(
+            execution.Id,
+            "worker-completed",
+            CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.False(claimed);
+        Assert.NotNull(retrieved);
+        Assert.Null(retrieved.OwnerId);
+    }
+
+    [SkippableFact]
+    public async Task TryClaimExecutionAsync_AggregateReadPreservesClaimedOwner()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Running,
+            LastHeartbeatAt = Timestamp
+        };
+        var nodeExecution = CreateNodeExecution();
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(execution.Id, nodeExecution, CancellationToken.None);
+
+        await store.TryClaimExecutionAsync(
+            execution.Id,
+            "worker-aggregate",
+            CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal("worker-aggregate", retrieved.OwnerId);
+        Assert.Equal(execution.LastHeartbeatAt, retrieved.LastHeartbeatAt);
+        Assert.Equal(nodeExecution, Assert.Single(retrieved.Nodes));
+    }
+
     protected static WorkflowExecution CreateExecution() =>
         new()
         {

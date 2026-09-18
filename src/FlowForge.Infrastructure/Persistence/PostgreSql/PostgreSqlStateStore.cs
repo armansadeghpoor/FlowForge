@@ -254,6 +254,61 @@ public sealed class PostgreSqlStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public async Task<bool> TryClaimExecutionAsync(
+        WorkflowExecutionId id,
+        string ownerId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ownerId);
+
+        const string claimSql =
+            """
+            UPDATE workflow_executions
+            SET owner_id = @OwnerId
+            WHERE id = @Id
+              AND status = @RunningStatus
+              AND owner_id IS NULL;
+            """;
+        const string existsSql =
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM workflow_executions
+                WHERE id = @Id
+            );
+            """;
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        var affectedRows = await connection.ExecuteAsync(new CommandDefinition(
+            claimSql,
+            new
+            {
+                Id = id.Value,
+                OwnerId = ownerId,
+                RunningStatus = WorkflowExecutionStatus.Running.ToString()
+            },
+            cancellationToken: cancellationToken));
+
+        if (affectedRows == 1)
+        {
+            return true;
+        }
+
+        var exists = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            existsSql,
+            new { Id = id.Value },
+            cancellationToken: cancellationToken));
+        if (!exists)
+        {
+            throw new KeyNotFoundException(
+                $"Workflow execution '{id.Value}' was not found.");
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc />
     public async Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
