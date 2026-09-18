@@ -297,6 +297,106 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(nodeExecution, Assert.Single(retrieved.Nodes));
     }
 
+    [SkippableFact]
+    public async Task FindStaleExecutionsAsync_RunningExecutionWithFreshHeartbeat_IsNotStale()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Running,
+            LastHeartbeatAt = Timestamp.AddMinutes(1)
+        };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var staleExecutions = await store.FindStaleExecutionsAsync(
+            Timestamp,
+            CancellationToken.None);
+
+        Assert.Empty(staleExecutions);
+    }
+
+    [SkippableFact]
+    public async Task FindStaleExecutionsAsync_RunningExecutionWithOldHeartbeat_IsStale()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Running,
+            LastHeartbeatAt = Timestamp.AddMinutes(-1)
+        };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var staleExecutions = await store.FindStaleExecutionsAsync(
+            Timestamp,
+            CancellationToken.None);
+
+        Assert.Equal(execution.Id, Assert.Single(staleExecutions).Id);
+    }
+
+    [SkippableFact]
+    public async Task FindStaleExecutionsAsync_RunningExecutionWithNullHeartbeat_IsStale()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Running,
+            LastHeartbeatAt = null
+        };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var staleExecutions = await store.FindStaleExecutionsAsync(
+            Timestamp,
+            CancellationToken.None);
+
+        Assert.Equal(execution.Id, Assert.Single(staleExecutions).Id);
+    }
+
+    [SkippableFact]
+    public async Task FindStaleExecutionsAsync_CompletedExecution_IsNotStale()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Succeeded,
+            CompletedAt = Timestamp,
+            LastHeartbeatAt = null
+        };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+
+        var staleExecutions = await store.FindStaleExecutionsAsync(
+            Timestamp,
+            CancellationToken.None);
+
+        Assert.Empty(staleExecutions);
+    }
+
+    [SkippableFact]
+    public async Task FindStaleExecutionsAsync_ReturnsCompleteAggregates()
+    {
+        var store = CreateStore();
+        var heartbeatAt = Timestamp.AddMinutes(-1);
+        var execution = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Running,
+            OwnerId = "worker-03",
+            LastHeartbeatAt = heartbeatAt
+        };
+        var nodeExecution = CreateNodeExecution();
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(execution.Id, nodeExecution, CancellationToken.None);
+
+        var staleExecutions = await store.FindStaleExecutionsAsync(
+            Timestamp,
+            CancellationToken.None);
+
+        var staleExecution = Assert.Single(staleExecutions);
+        Assert.Equal(execution.Id, staleExecution.Id);
+        Assert.Equal(WorkflowExecutionStatus.Running, staleExecution.Status);
+        Assert.Equal("worker-03", staleExecution.OwnerId);
+        Assert.Equal(heartbeatAt, staleExecution.LastHeartbeatAt);
+        Assert.Equal(nodeExecution, Assert.Single(staleExecution.Nodes));
+    }
+
     protected static WorkflowExecution CreateExecution() =>
         new()
         {

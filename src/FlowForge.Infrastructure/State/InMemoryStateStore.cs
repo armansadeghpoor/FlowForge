@@ -81,6 +81,25 @@ public sealed class InMemoryStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<WorkflowExecution>> FindStaleExecutionsAsync(
+        DateTime threshold,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<WorkflowExecution> executions = Array.AsReadOnly(
+            _executions.Values
+                .Where(execution =>
+                    execution.Status == WorkflowExecutionStatus.Running &&
+                    (execution.LastHeartbeatAt is null ||
+                     execution.LastHeartbeatAt < threshold))
+                .Select(Snapshot)
+                .ToArray());
+
+        return Task.FromResult(executions);
+    }
+
+    /// <inheritdoc />
     public Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,

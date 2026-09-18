@@ -187,6 +187,73 @@ public sealed class PostgreSqlStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<WorkflowExecution>> FindStaleExecutionsAsync(
+        DateTime threshold,
+        CancellationToken cancellationToken)
+    {
+        const string workflowsSql =
+            """
+            SELECT id AS Id,
+                   workflow_id AS WorkflowId,
+                   status AS Status,
+                   started_at AS StartedAt,
+                   completed_at AS CompletedAt,
+                   created_at AS CreatedAt,
+                   owner_id AS OwnerId,
+                   last_heartbeat_at AS LastHeartbeatAt
+            FROM workflow_executions
+            WHERE status = @RunningStatus
+              AND (last_heartbeat_at IS NULL OR last_heartbeat_at < @Threshold)
+            ORDER BY created_at, id;
+            """;
+        const string nodesSql =
+            """
+            SELECT id AS Id,
+                   workflow_execution_id AS WorkflowExecutionId,
+                   node_id AS NodeId,
+                   status AS Status,
+                   attempt_number AS AttemptNumber,
+                   output::text AS Output,
+                   failure::text AS Failure,
+                   started_at AS StartedAt,
+                   completed_at AS CompletedAt
+            FROM node_executions
+            WHERE workflow_execution_id = ANY(@WorkflowExecutionIds)
+            ORDER BY workflow_execution_id, started_at NULLS FIRST, id;
+            """;
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        var workflowRows = (await connection.QueryAsync<WorkflowExecutionRow>(
+            new CommandDefinition(
+                workflowsSql,
+                new
+                {
+                    RunningStatus = WorkflowExecutionStatus.Running.ToString(),
+                    Threshold = ToDatabaseTimestamp(threshold)
+                },
+                cancellationToken: cancellationToken))).ToArray();
+
+        if (workflowRows.Length == 0)
+        {
+            return Array.Empty<WorkflowExecution>();
+        }
+
+        var nodeRows = await connection.QueryAsync<NodeExecutionRow>(new CommandDefinition(
+            nodesSql,
+            new { WorkflowExecutionIds = workflowRows.Select(row => row.Id).ToArray() },
+            cancellationToken: cancellationToken));
+        var nodesByExecution = nodeRows.ToLookup(row => row.WorkflowExecutionId);
+        var executions = workflowRows
+            .Select(workflow => MapWorkflowExecution(
+                workflow,
+                nodesByExecution[workflow.Id].Select(MapNodeExecution)))
+            .ToArray();
+
+        return Array.AsReadOnly(executions);
+    }
+
+    /// <inheritdoc />
     public async Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
@@ -274,9 +341,13 @@ public sealed class PostgreSqlStateStore : IStateStore
             nodesSql,
             new { WorkflowExecutionId = id.Value },
             cancellationToken: cancellationToken));
-        var nodes = nodeRows.Select(MapNodeExecution).ToArray();
+        return MapWorkflowExecution(workflow, nodeRows.Select(MapNodeExecution));
+    }
 
-        return new WorkflowExecution
+    private static WorkflowExecution MapWorkflowExecution(
+        WorkflowExecutionRow workflow,
+        IEnumerable<NodeExecutionState> nodes) =>
+        new()
         {
             Id = new WorkflowExecutionId(workflow.Id),
             WorkflowId = new WorkflowId(workflow.WorkflowId),
@@ -286,9 +357,8 @@ public sealed class PostgreSqlStateStore : IStateStore
             CompletedAt = FromDatabaseTimestamp(workflow.CompletedAt),
             OwnerId = workflow.OwnerId,
             LastHeartbeatAt = FromDatabaseTimestamp(workflow.LastHeartbeatAt),
-            Nodes = Array.AsReadOnly(nodes)
+            Nodes = Array.AsReadOnly(nodes.ToArray())
         };
-    }
 
     /// <inheritdoc />
     public async Task<NodeExecutionState?> GetNodeExecutionAsync(
@@ -448,6 +518,8 @@ public sealed class PostgreSqlStateStore : IStateStore
     private sealed class NodeExecutionRow
     {
         public Guid Id { get; init; }
+
+        public Guid WorkflowExecutionId { get; init; }
 
         public Guid NodeId { get; init; }
 

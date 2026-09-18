@@ -51,6 +51,17 @@ public interface IStateStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds running workflow execution aggregates whose heartbeat is absent or older
+    /// than the supplied threshold.
+    /// </summary>
+    /// <param name="threshold">The exclusive heartbeat freshness threshold.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>The complete stale workflow execution aggregates.</returns>
+    Task<IReadOnlyList<WorkflowExecution>> FindStaleExecutionsAsync(
+        DateTime threshold,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Saves a node snapshot within an existing workflow execution. A save replaces
     /// the entire node state with the same node execution identifier within that workflow,
     /// or adds it when absent. The last applied save wins.
