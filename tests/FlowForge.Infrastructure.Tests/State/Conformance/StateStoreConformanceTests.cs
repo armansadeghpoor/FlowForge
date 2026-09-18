@@ -27,6 +27,8 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(execution.CreatedAt, retrieved.CreatedAt);
         Assert.Equal(execution.StartedAt, retrieved.StartedAt);
         Assert.Equal(execution.CompletedAt, retrieved.CompletedAt);
+        Assert.Equal(execution.OwnerId, retrieved.OwnerId);
+        Assert.Equal(execution.LastHeartbeatAt, retrieved.LastHeartbeatAt);
         Assert.Equal(execution.Nodes, retrieved.Nodes);
     }
 
@@ -209,6 +211,92 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(completedAt, retrieved.CompletedAt);
     }
 
+    [SkippableFact]
+    public async Task CreateExecutionAsync_PreservesOwnerId()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with { OwnerId = "worker-01" };
+
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal("worker-01", retrieved.OwnerId);
+    }
+
+    [SkippableFact]
+    public async Task CreateExecutionAsync_PreservesLastHeartbeatAt()
+    {
+        var store = CreateStore();
+        var heartbeatAt = Timestamp.AddMinutes(1);
+        var execution = CreateExecution() with { LastHeartbeatAt = heartbeatAt };
+
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal(heartbeatAt, retrieved.LastHeartbeatAt);
+    }
+
+    [SkippableFact]
+    public async Task UpdateHeartbeatAsync_ReplacesHeartbeatAndPreservesExecutionData()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with
+        {
+            OwnerId = "worker-01",
+            LastHeartbeatAt = Timestamp
+        };
+        var nodeExecution = CreateNodeExecution();
+        var heartbeatAt = Timestamp.AddMinutes(2);
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(execution.Id, nodeExecution, CancellationToken.None);
+
+        await store.UpdateHeartbeatAsync(execution.Id, heartbeatAt, CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal(heartbeatAt, retrieved.LastHeartbeatAt);
+        Assert.Equal(execution.OwnerId, retrieved.OwnerId);
+        Assert.Equal(execution.Status, retrieved.Status);
+        Assert.Equal(nodeExecution, Assert.Single(retrieved.Nodes));
+    }
+
+    [SkippableFact]
+    public async Task UpdateHeartbeatAsync_MissingExecution_ThrowsKeyNotFoundException()
+    {
+        var store = CreateStore();
+        var executionId = new WorkflowExecutionId(Guid.NewGuid());
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => store.UpdateHeartbeatAsync(
+                executionId,
+                Timestamp,
+                CancellationToken.None));
+    }
+
+    [SkippableFact]
+    public async Task GetExecutionAsync_AggregatePreservesRecoveryMetadata()
+    {
+        var store = CreateStore();
+        var heartbeatAt = Timestamp.AddMinutes(3);
+        var execution = CreateExecution() with
+        {
+            OwnerId = "worker-02",
+            LastHeartbeatAt = heartbeatAt
+        };
+        var nodeExecution = CreateNodeExecution();
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(execution.Id, nodeExecution, CancellationToken.None);
+
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal("worker-02", retrieved.OwnerId);
+        Assert.Equal(heartbeatAt, retrieved.LastHeartbeatAt);
+        Assert.Equal(nodeExecution, Assert.Single(retrieved.Nodes));
+    }
+
     protected static WorkflowExecution CreateExecution() =>
         new()
         {
@@ -218,6 +306,8 @@ public abstract class StateStoreConformanceTests
             CreatedAt = Timestamp,
             StartedAt = null,
             CompletedAt = null,
+            OwnerId = null,
+            LastHeartbeatAt = null,
             Nodes = Array.Empty<NodeExecutionState>()
         };
 

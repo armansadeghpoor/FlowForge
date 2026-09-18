@@ -19,9 +19,11 @@ public sealed class PostgreSqlStateStore : IStateStore
     private const string InsertWorkflowSql =
         """
         INSERT INTO workflow_executions
-            (id, workflow_id, status, started_at, completed_at, created_at)
+            (id, workflow_id, status, started_at, completed_at, created_at,
+             owner_id, last_heartbeat_at)
         VALUES
-            (@Id, @WorkflowId, @Status, @StartedAt, @CompletedAt, @CreatedAt);
+            (@Id, @WorkflowId, @Status, @StartedAt, @CompletedAt, @CreatedAt,
+             @OwnerId, @LastHeartbeatAt);
         """;
 
     private const string InsertNodeSql =
@@ -88,7 +90,9 @@ public sealed class PostgreSqlStateStore : IStateStore
                     Status = execution.Status.ToString(),
                     StartedAt = ToDatabaseTimestamp(execution.StartedAt),
                     CompletedAt = ToDatabaseTimestamp(execution.CompletedAt),
-                    CreatedAt = ToDatabaseTimestamp(execution.CreatedAt)
+                    CreatedAt = ToDatabaseTimestamp(execution.CreatedAt),
+                    execution.OwnerId,
+                    LastHeartbeatAt = ToDatabaseTimestamp(execution.LastHeartbeatAt)
                 },
                 transaction,
                 cancellationToken: cancellationToken));
@@ -152,6 +156,37 @@ public sealed class PostgreSqlStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public async Task UpdateHeartbeatAsync(
+        WorkflowExecutionId id,
+        DateTime lastHeartbeatAt,
+        CancellationToken cancellationToken)
+    {
+        const string sql =
+            """
+            UPDATE workflow_executions
+            SET last_heartbeat_at = @LastHeartbeatAt
+            WHERE id = @Id;
+            """;
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        var affectedRows = await connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            new
+            {
+                Id = id.Value,
+                LastHeartbeatAt = ToDatabaseTimestamp(lastHeartbeatAt)
+            },
+            cancellationToken: cancellationToken));
+
+        if (affectedRows == 0)
+        {
+            throw new KeyNotFoundException(
+                $"Workflow execution '{id.Value}' was not found.");
+        }
+    }
+
+    /// <inheritdoc />
     public async Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
@@ -202,7 +237,9 @@ public sealed class PostgreSqlStateStore : IStateStore
                    status AS Status,
                    started_at AS StartedAt,
                    completed_at AS CompletedAt,
-                   created_at AS CreatedAt
+                   created_at AS CreatedAt,
+                   owner_id AS OwnerId,
+                   last_heartbeat_at AS LastHeartbeatAt
             FROM workflow_executions
             WHERE id = @Id;
             """;
@@ -247,6 +284,8 @@ public sealed class PostgreSqlStateStore : IStateStore
             CreatedAt = FromDatabaseTimestamp(workflow.CreatedAt),
             StartedAt = FromDatabaseTimestamp(workflow.StartedAt),
             CompletedAt = FromDatabaseTimestamp(workflow.CompletedAt),
+            OwnerId = workflow.OwnerId,
+            LastHeartbeatAt = FromDatabaseTimestamp(workflow.LastHeartbeatAt),
             Nodes = Array.AsReadOnly(nodes)
         };
     }
@@ -400,6 +439,10 @@ public sealed class PostgreSqlStateStore : IStateStore
         public DateTime? StartedAt { get; init; }
 
         public DateTime? CompletedAt { get; init; }
+
+        public string? OwnerId { get; init; }
+
+        public DateTime? LastHeartbeatAt { get; init; }
     }
 
     private sealed class NodeExecutionRow

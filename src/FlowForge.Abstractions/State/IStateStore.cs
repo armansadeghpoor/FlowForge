@@ -38,6 +38,19 @@ public interface IStateStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Updates the most recent heartbeat timestamp of an existing workflow execution,
+    /// preserving all other execution data.
+    /// </summary>
+    /// <param name="id">The workflow execution identifier.</param>
+    /// <param name="lastHeartbeatAt">The time of the most recent heartbeat.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <exception cref="KeyNotFoundException">The workflow execution does not exist.</exception>
+    Task UpdateHeartbeatAsync(
+        WorkflowExecutionId id,
+        DateTime lastHeartbeatAt,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Saves a node snapshot within an existing workflow execution. A save replaces
     /// the entire node state with the same node execution identifier within that workflow,
     /// or adds it when absent. The last applied save wins.

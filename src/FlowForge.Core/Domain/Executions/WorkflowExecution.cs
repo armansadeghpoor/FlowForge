@@ -20,5 +20,15 @@ public sealed record WorkflowExecution
 
     public required DateTime? CompletedAt { get; init; }
 
+    /// <summary>
+    /// Gets the identifier of the execution owner, if one has been assigned.
+    /// </summary>
+    public required string? OwnerId { get; init; }
+
+    /// <summary>
+    /// Gets the time of the most recent execution heartbeat, if one has been recorded.
+    /// </summary>
+    public required DateTime? LastHeartbeatAt { get; init; }
+
     public required IReadOnlyList<NodeExecutionState> Nodes { get; init; }
 }

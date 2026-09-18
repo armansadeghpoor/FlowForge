@@ -69,6 +69,8 @@ public sealed class WorkflowExecutor
             CreatedAt = startedAt,
             StartedAt = startedAt,
             CompletedAt = null,
+            OwnerId = null,
+            LastHeartbeatAt = null,
             Nodes = Array.Empty<NodeExecutionState>()
         };
         await _stateStore.CreateExecutionAsync(execution, cancellationToken);

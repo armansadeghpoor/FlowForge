@@ -60,6 +60,27 @@ public sealed class InMemoryStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public Task UpdateHeartbeatAsync(
+        WorkflowExecutionId id,
+        DateTime lastHeartbeatAt,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        while (_executions.TryGetValue(id, out var current))
+        {
+            var updated = current with { LastHeartbeatAt = lastHeartbeatAt };
+            if (_executions.TryUpdate(id, updated, current))
+            {
+                return Task.CompletedTask;
+            }
+        }
+
+        throw new KeyNotFoundException(
+            $"Workflow execution '{id.Value}' was not found.");
+    }
+
+    /// <inheritdoc />
     public Task SaveNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,

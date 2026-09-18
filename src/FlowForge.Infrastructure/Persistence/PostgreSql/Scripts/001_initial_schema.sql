@@ -5,7 +5,9 @@ CREATE TABLE workflow_executions
     status VARCHAR(32),
     started_at TIMESTAMP NULL,
     completed_at TIMESTAMP NULL,
-    created_at TIMESTAMP NOT NULL
+    created_at TIMESTAMP NOT NULL,
+    owner_id TEXT NULL,
+    last_heartbeat_at TIMESTAMP NULL
 );
 
 CREATE TABLE node_executions
