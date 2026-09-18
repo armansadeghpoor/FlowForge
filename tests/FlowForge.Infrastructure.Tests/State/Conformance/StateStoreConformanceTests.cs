@@ -23,6 +23,7 @@ public abstract class StateStoreConformanceTests
         Assert.NotNull(retrieved);
         Assert.Equal(execution.Id, retrieved.Id);
         Assert.Equal(execution.WorkflowId, retrieved.WorkflowId);
+        Assert.Equal(execution.DefinitionVersion, retrieved.DefinitionVersion);
         Assert.Equal(execution.Status, retrieved.Status);
         Assert.Equal(execution.CreatedAt, retrieved.CreatedAt);
         Assert.Equal(execution.StartedAt, retrieved.StartedAt);
@@ -528,11 +529,74 @@ public abstract class StateStoreConformanceTests
         Assert.Equal(nodeExecution, Assert.Single(retrieved.Nodes));
     }
 
+    [SkippableFact]
+    public async Task CreateExecutionAsync_DefinitionVersionRoundTrips()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with { DefinitionVersion = "definition-2026.09" };
+
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal("definition-2026.09", retrieved.DefinitionVersion);
+    }
+
+    [SkippableFact]
+    public async Task GetExecutionAsync_AggregatePreservesDefinitionVersion()
+    {
+        var store = CreateStore();
+        var execution = CreateExecution() with { DefinitionVersion = "aggregate-v2" };
+        var nodeExecution = CreateNodeExecution();
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(execution.Id, nodeExecution, CancellationToken.None);
+
+        var retrieved = await store.GetExecutionAsync(execution.Id, CancellationToken.None);
+
+        Assert.NotNull(retrieved);
+        Assert.Equal("aggregate-v2", retrieved.DefinitionVersion);
+        Assert.Equal(nodeExecution, Assert.Single(retrieved.Nodes));
+    }
+
+    [SkippableFact]
+    public async Task CreateExecutionAsync_SameWorkflowSupportsDifferentDefinitionVersions()
+    {
+        var store = CreateStore();
+        var workflowId = new WorkflowId(Guid.NewGuid());
+        var firstExecution = CreateExecution() with
+        {
+            WorkflowId = workflowId,
+            DefinitionVersion = "v1"
+        };
+        var secondExecution = CreateExecution() with
+        {
+            WorkflowId = workflowId,
+            DefinitionVersion = "v2"
+        };
+        await store.CreateExecutionAsync(firstExecution, CancellationToken.None);
+        await store.CreateExecutionAsync(secondExecution, CancellationToken.None);
+
+        var retrievedFirst = await store.GetExecutionAsync(
+            firstExecution.Id,
+            CancellationToken.None);
+        var retrievedSecond = await store.GetExecutionAsync(
+            secondExecution.Id,
+            CancellationToken.None);
+
+        Assert.NotNull(retrievedFirst);
+        Assert.NotNull(retrievedSecond);
+        Assert.Equal(workflowId, retrievedFirst.WorkflowId);
+        Assert.Equal(workflowId, retrievedSecond.WorkflowId);
+        Assert.Equal("v1", retrievedFirst.DefinitionVersion);
+        Assert.Equal("v2", retrievedSecond.DefinitionVersion);
+    }
+
     protected static WorkflowExecution CreateExecution() =>
         new()
         {
             Id = new WorkflowExecutionId(Guid.NewGuid()),
             WorkflowId = new WorkflowId(Guid.NewGuid()),
+            DefinitionVersion = "test-v1",
             Status = WorkflowExecutionStatus.Pending,
             CreatedAt = Timestamp,
             StartedAt = null,

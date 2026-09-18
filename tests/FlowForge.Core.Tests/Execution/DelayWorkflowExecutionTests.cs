@@ -24,6 +24,7 @@ public sealed class DelayWorkflowExecutionTests
         var workflow = new WorkflowDefinition
         {
             Id = new WorkflowId(Guid.NewGuid()),
+            Version = "delay-v1",
             Name = "Zero-duration delay",
             Nodes =
             [
@@ -51,9 +52,11 @@ public sealed class DelayWorkflowExecutionTests
             CancellationToken.None);
 
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
+        Assert.Equal(workflow.Version, execution.DefinitionVersion);
         Assert.Equal(NodeExecutionStatus.Succeeded, nodeExecution.Status);
         Assert.NotNull(storedExecution);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, storedExecution.Status);
+        Assert.Equal(workflow.Version, storedExecution.DefinitionVersion);
         Assert.NotNull(storedNodeExecution);
         Assert.Equal(NodeExecutionStatus.Succeeded, storedNodeExecution.Status);
     }

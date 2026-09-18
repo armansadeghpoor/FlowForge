@@ -9,6 +9,11 @@ public sealed record WorkflowDefinition
 {
     public required WorkflowId Id { get; init; }
 
+    /// <summary>
+    /// Gets the immutable version identifier of this workflow definition.
+    /// </summary>
+    public required string Version { get; init; }
+
     public required string Name { get; init; }
 
     public required IReadOnlyList<NodeDefinition> Nodes { get; init; }

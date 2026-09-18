@@ -2,6 +2,7 @@ CREATE TABLE workflow_executions
 (
     id UUID PRIMARY KEY,
     workflow_id UUID NOT NULL,
+    definition_version TEXT NOT NULL,
     status VARCHAR(32),
     started_at TIMESTAMP NULL,
     completed_at TIMESTAMP NULL,

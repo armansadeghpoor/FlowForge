@@ -19,11 +19,11 @@ public sealed class PostgreSqlStateStore : IStateStore
     private const string InsertWorkflowSql =
         """
         INSERT INTO workflow_executions
-            (id, workflow_id, status, started_at, completed_at, created_at,
-             owner_id, last_heartbeat_at)
+            (id, workflow_id, definition_version, status, started_at,
+             completed_at, created_at, owner_id, last_heartbeat_at)
         VALUES
-            (@Id, @WorkflowId, @Status, @StartedAt, @CompletedAt, @CreatedAt,
-             @OwnerId, @LastHeartbeatAt);
+            (@Id, @WorkflowId, @DefinitionVersion, @Status, @StartedAt,
+             @CompletedAt, @CreatedAt, @OwnerId, @LastHeartbeatAt);
         """;
 
     private const string InsertNodeSql =
@@ -87,6 +87,7 @@ public sealed class PostgreSqlStateStore : IStateStore
                 {
                     Id = execution.Id.Value,
                     WorkflowId = execution.WorkflowId.Value,
+                    execution.DefinitionVersion,
                     Status = execution.Status.ToString(),
                     StartedAt = ToDatabaseTimestamp(execution.StartedAt),
                     CompletedAt = ToDatabaseTimestamp(execution.CompletedAt),
@@ -195,6 +196,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             """
             SELECT id AS Id,
                    workflow_id AS WorkflowId,
+                   definition_version AS DefinitionVersion,
                    status AS Status,
                    started_at AS StartedAt,
                    completed_at AS CompletedAt,
@@ -356,6 +358,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             """
             SELECT id AS Id,
                    workflow_id AS WorkflowId,
+                   definition_version AS DefinitionVersion,
                    status AS Status,
                    started_at AS StartedAt,
                    completed_at AS CompletedAt,
@@ -406,6 +409,9 @@ public sealed class PostgreSqlStateStore : IStateStore
         {
             Id = new WorkflowExecutionId(workflow.Id),
             WorkflowId = new WorkflowId(workflow.WorkflowId),
+            DefinitionVersion = workflow.DefinitionVersion
+                ?? throw new InvalidOperationException(
+                    "Stored workflow definition version is missing."),
             Status = ParseStatus<WorkflowExecutionStatus>(workflow.Status),
             CreatedAt = FromDatabaseTimestamp(workflow.CreatedAt),
             StartedAt = FromDatabaseTimestamp(workflow.StartedAt),
@@ -556,6 +562,8 @@ public sealed class PostgreSqlStateStore : IStateStore
         public Guid Id { get; init; }
 
         public Guid WorkflowId { get; init; }
+
+        public string? DefinitionVersion { get; init; }
 
         public string? Status { get; init; }
 

@@ -28,7 +28,8 @@ public sealed class WorkflowExecutorTests
                 return Task.FromResult(Succeeded());
             }));
 
-        var execution = await engine.ExecuteAsync(Workflow([node]), CancellationToken.None);
+        var workflow = Workflow([node]);
+        var execution = await engine.ExecuteAsync(workflow, CancellationToken.None);
         var storedExecution = await stateStore.GetExecutionAsync(
             execution.Id,
             CancellationToken.None);
@@ -44,11 +45,13 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(nodeState.Id, context.NodeExecutionId);
         Assert.Equal(1, context.AttemptNumber);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
+        Assert.Equal(workflow.Version, execution.DefinitionVersion);
         Assert.Equal(NodeExecutionStatus.Succeeded, nodeState.Status);
         Assert.NotNull(execution.StartedAt);
         Assert.NotNull(execution.CompletedAt);
         Assert.NotNull(storedExecution);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, storedExecution.Status);
+        Assert.Equal(workflow.Version, storedExecution.DefinitionVersion);
         Assert.Equal(execution.CompletedAt, storedExecution.CompletedAt);
         Assert.Equal(nodeState, Assert.Single(storedExecution.Nodes));
         Assert.NotNull(storedNode);
@@ -321,6 +324,7 @@ public sealed class WorkflowExecutorTests
         new()
         {
             Id = new WorkflowId(Guid.Parse("10000000-0000-0000-0000-000000000000")),
+            Version = "test-v1",
             Name = "Test workflow",
             Nodes = nodes,
             Edges = edges

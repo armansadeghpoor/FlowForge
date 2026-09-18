@@ -22,6 +22,7 @@ internal static class TestWorkflowFactory
         new()
         {
             Id = new WorkflowId(Guid.Parse("10000000-0000-0000-0000-000000000000")),
+            Version = "test-v1",
             Name = "Test workflow",
             Nodes = nodeIds.Select(Node).ToArray(),
             Edges = edges

@@ -26,6 +26,7 @@ public sealed class HttpWorkflowExecutionTests
         var workflow = new WorkflowDefinition
         {
             Id = new WorkflowId(Guid.NewGuid()),
+            Version = "http-v1",
             Name = "HTTP workflow",
             Nodes =
             [

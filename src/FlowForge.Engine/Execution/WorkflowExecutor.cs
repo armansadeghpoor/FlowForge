@@ -65,6 +65,7 @@ public sealed class WorkflowExecutor
         {
             Id = new WorkflowExecutionId(Guid.NewGuid()),
             WorkflowId = workflow.Id,
+            DefinitionVersion = workflow.Version,
             Status = WorkflowExecutionStatus.Running,
             CreatedAt = startedAt,
             StartedAt = startedAt,
