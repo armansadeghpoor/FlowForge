@@ -1,0 +1,49 @@
+name: PostgreSQL Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: flowforge
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore FlowForge.slnx
+
+      - name: Build solution
+        run: dotnet build FlowForge.slnx --no-restore
+
+      - name: Run solution tests
+        env:
+          FLOWFORGE_POSTGRES_CONNECTION_STRING: Host=localhost;Port=5432;Database=flowforge;Username=postgres;Password=postgres
+        run: dotnet test FlowForge.slnx --no-build --no-restore
