@@ -114,6 +114,7 @@ public sealed class ApplicationServicesTests
 
         Assert.Contains("FlowForge.Abstractions", references);
         Assert.Contains("FlowForge.Core", references);
+        Assert.DoesNotContain("FlowForge.Engine", references);
         Assert.DoesNotContain("FlowForge.Infrastructure", references);
     }
 
