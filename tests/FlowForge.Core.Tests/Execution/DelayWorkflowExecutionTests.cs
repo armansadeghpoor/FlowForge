@@ -23,9 +23,11 @@ public sealed class DelayWorkflowExecutionTests
             new ExecutionPipeline([])));
         var workflow = new WorkflowDefinition
         {
-            Id = new WorkflowId(Guid.NewGuid()),
-            Version = "delay-v1",
+            Id = new WorkflowDefinitionId(Guid.NewGuid()),
             Name = "Zero-duration delay",
+            Version = "delay-v1",
+            Description = null,
+            CreatedAt = DateTime.UtcNow,
             Nodes =
             [
                 new NodeDefinition

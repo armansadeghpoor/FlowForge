@@ -349,9 +349,12 @@ public sealed class WorkflowExecutorTests
         params EdgeDefinition[] edges) =>
         new()
         {
-            Id = new WorkflowId(Guid.Parse("10000000-0000-0000-0000-000000000000")),
-            Version = "test-v1",
+            Id = new WorkflowDefinitionId(
+                Guid.Parse("10000000-0000-0000-0000-000000000000")),
             Name = "Test workflow",
+            Version = "test-v1",
+            Description = null,
+            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             Nodes = nodes,
             Edges = edges
         };
