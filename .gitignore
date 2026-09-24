@@ -1,1 +1,17 @@
 .DS_Store
+
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# IDE files
+.vscode/
+.idea/
+
+# User-specific files
+*.user
+*.suo
+
+# Test results
+TestResults/
+*.trx
