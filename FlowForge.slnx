@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/FlowForge.Abstractions/FlowForge.Abstractions.csproj" />
+    <Project Path="src/FlowForge.Application/FlowForge.Application.csproj" />
     <Project Path="src/FlowForge.Console/FlowForge.Console.csproj" />
     <Project Path="src/FlowForge.Core/FlowForge.Core.csproj" />
     <Project Path="src/FlowForge.Engine/FlowForge.Engine.csproj" />
@@ -8,6 +9,7 @@
     <Project Path="src/FlowForge.Nodes/FlowForge.Nodes.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FlowForge.Application.Tests/FlowForge.Application.Tests.csproj" />
     <Project Path="tests/FlowForge.Core.Tests/FlowForge.Core.Tests.csproj" />
     <Project Path="tests/FlowForge.Infrastructure.Tests/FlowForge.Infrastructure.Tests.csproj" />
     <Project Path="tests/FlowForge.Nodes.Tests/FlowForge.Nodes.Tests.csproj" />
