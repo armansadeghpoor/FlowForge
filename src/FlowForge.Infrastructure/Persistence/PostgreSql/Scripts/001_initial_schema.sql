@@ -1,3 +1,14 @@
+CREATE TABLE workflow_definitions
+(
+    id UUID NOT NULL,
+    version TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NULL,
+    definition JSONB NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    CONSTRAINT pk_workflow_definitions PRIMARY KEY (id, version)
+);
+
 CREATE TABLE workflow_executions
 (
     id UUID PRIMARY KEY,
