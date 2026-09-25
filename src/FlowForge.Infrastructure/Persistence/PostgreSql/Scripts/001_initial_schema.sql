@@ -23,6 +23,18 @@ CREATE TABLE workflow_executions
     last_heartbeat_at TIMESTAMP NULL
 );
 
+CREATE TABLE execution_requests
+(
+    id UUID PRIMARY KEY
+);
+
+CREATE TABLE schedule_executions
+(
+    schedule_id UUID NOT NULL,
+    occurrence_at TIMESTAMP NOT NULL,
+    CONSTRAINT pk_schedule_executions PRIMARY KEY (schedule_id, occurrence_at)
+);
+
 CREATE TABLE node_executions
 (
     id UUID PRIMARY KEY,

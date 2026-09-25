@@ -3,7 +3,7 @@ using FlowForge.Core.Domain.Identifiers;
 namespace FlowForge.Abstractions.Scheduling;
 
 /// <summary>
-/// Tracks claimed schedule occurrences to prevent duplicate local execution.
+/// Tracks claimed schedule occurrences to prevent duplicate execution.
 /// </summary>
 public interface IScheduleExecutionTracker
 {
