@@ -30,6 +30,11 @@ public sealed record WorkflowTrigger
     public required TriggerType Type { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether the trigger may start workflow executions.
+    /// </summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>
     /// Gets provider-independent trigger configuration.
     /// </summary>
     public required IReadOnlyDictionary<string, JsonElement> Configuration { get; init; }

@@ -15,6 +15,8 @@ public sealed record CreateWorkflowTriggerRequest
 
     public required string Type { get; init; }
 
+    public bool Enabled { get; init; } = true;
+
     public required IReadOnlyDictionary<string, JsonElement> Configuration { get; init; }
 }
 
@@ -31,5 +33,21 @@ public sealed record WorkflowTriggerDto
 
     public required string Type { get; init; }
 
+    public required bool Enabled { get; init; }
+
     public required IReadOnlyDictionary<string, JsonElement> Configuration { get; init; }
+}
+
+/// <summary>
+/// Represents a created trigger-based workflow execution.
+/// </summary>
+public sealed record TriggerExecutionDto
+{
+    public required Guid WorkflowExecutionId { get; init; }
+
+    public required Guid TriggerId { get; init; }
+
+    public required string CorrelationId { get; init; }
+
+    public required DateTime RequestedAt { get; init; }
 }

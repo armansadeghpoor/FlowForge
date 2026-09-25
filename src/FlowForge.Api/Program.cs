@@ -1,4 +1,5 @@
 using FlowForge.Application.Definitions;
+using FlowForge.Application.Executions;
 using FlowForge.Application.Queries;
 using FlowForge.Application.Schedules;
 using FlowForge.Application.Triggers;
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+builder.Services.AddScoped<IWorkflowExecutionCommandService, WorkflowExecutionCommandService>();
 builder.Services.AddScoped<IWorkflowTriggerService, WorkflowTriggerService>();
 builder.Services.AddScoped<IWorkflowScheduleService, WorkflowScheduleService>();
 builder.Services.AddScoped<IWorkflowEventTriggerService, WorkflowEventTriggerService>();

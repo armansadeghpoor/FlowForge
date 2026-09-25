@@ -69,6 +69,7 @@ internal static class ApiMappings
             WorkflowDefinitionId = new WorkflowDefinitionId(request.WorkflowDefinitionId),
             DefinitionVersion = request.DefinitionVersion,
             Type = ParseTriggerType(request.Type),
+            Enabled = request.Enabled,
             Configuration = Clone(request.Configuration)
         };
 
@@ -79,6 +80,7 @@ internal static class ApiMappings
             WorkflowDefinitionId = trigger.WorkflowDefinitionId.Value,
             DefinitionVersion = trigger.DefinitionVersion,
             Type = trigger.Type.ToString(),
+            Enabled = trigger.Enabled,
             Configuration = Clone(trigger.Configuration)
         };
 

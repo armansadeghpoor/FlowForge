@@ -36,7 +36,9 @@ internal static class ApplicationErrorMapper
             return new NotFoundObjectResult(response);
         }
 
-        if (errors.Any(error => error.Code.EndsWith("AlreadyExists", StringComparison.Ordinal)))
+        if (errors.Any(error =>
+                error.Code.EndsWith("AlreadyExists", StringComparison.Ordinal) ||
+                error.Code.EndsWith("Conflict", StringComparison.Ordinal)))
         {
             return new ConflictObjectResult(response);
         }
