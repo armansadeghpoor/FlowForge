@@ -5,10 +5,12 @@ using FlowForge.Application.Executions;
 using FlowForge.Application.Queries;
 using FlowForge.Application.Schedules;
 using FlowForge.Application.Triggers;
+using FlowForge.Api.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddFlowForgeConfiguration(builder.Configuration);
 builder.Services.AddScoped<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();
 builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
 builder.Services.AddScoped<IWorkflowEventService, WorkflowEventService>();
