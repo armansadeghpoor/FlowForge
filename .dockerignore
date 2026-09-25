@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/TestResults/
+**/*.trx
+**/*.coverage
+**/*.coverage.*
+**/coverage/
+artifacts/
+.git/
+.vs/
+.idea/
+.vscode/
