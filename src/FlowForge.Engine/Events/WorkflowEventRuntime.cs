@@ -68,7 +68,7 @@ public sealed class WorkflowEventRuntime : IWorkflowEventRuntime
                 {
                     ExecutionRequestId = ExecutionRequestIdFactory.Create(
                         eventTrigger.Id.Value,
-                        eventContext.CorrelationId),
+                        eventContext.CorrelationId.Value.ToString("N")),
                     TriggerId = eventTrigger.WorkflowTriggerId,
                     TriggerType = TriggerType.Event,
                     CorrelationId = eventContext.CorrelationId,

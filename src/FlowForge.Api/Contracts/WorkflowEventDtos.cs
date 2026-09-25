@@ -19,7 +19,7 @@ public sealed record WorkflowEventDispatchDto
 {
     public required string EventType { get; init; }
 
-    public required string CorrelationId { get; init; }
+    public required Guid CorrelationId { get; init; }
 
     public required DateTime OccurredAt { get; init; }
 

@@ -36,9 +36,32 @@ public sealed class ExecutionQueryService : IExecutionQueryService
             return null;
         }
 
-        return new ExecutionSummary
+        return CreateSummary(execution);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ExecutionSummary>> FindExecutionsByCorrelationIdAsync(
+        ExecutionCorrelationId correlationId,
+        CancellationToken cancellationToken)
+    {
+        var executions = await _stateStore.FindExecutionsByCorrelationIdAsync(
+            correlationId,
+            cancellationToken);
+        return Array.AsReadOnly(executions.Select(CreateSummary).ToArray());
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ExecutionHistoryEntry>> GetTimelineAsync(
+        WorkflowExecutionId executionId,
+        CancellationToken cancellationToken) =>
+        _stateStore.GetExecutionHistoryAsync(executionId, cancellationToken);
+
+    private static ExecutionSummary CreateSummary(
+        FlowForge.Core.Domain.Executions.WorkflowExecution execution) =>
+        new()
         {
             WorkflowExecutionId = execution.Id,
+            CorrelationId = execution.CorrelationId,
             Status = execution.Status,
             DefinitionVersion = execution.DefinitionVersion,
             StartedAt = execution.StartedAt,
@@ -60,11 +83,4 @@ public sealed class ExecutionQueryService : IExecutionQueryService
                     node => node.Status == NodeExecutionStatus.Cancelled)
             }
         };
-    }
-
-    /// <inheritdoc />
-    public Task<IReadOnlyList<ExecutionHistoryEntry>> GetTimelineAsync(
-        WorkflowExecutionId executionId,
-        CancellationToken cancellationToken) =>
-        _stateStore.GetExecutionHistoryAsync(executionId, cancellationToken);
 }

@@ -59,7 +59,7 @@ public sealed class IdempotentWorkflowTriggerExecutorTests
             ExecutionRequestId = new ExecutionRequestId(Guid.NewGuid()),
             TriggerId = new WorkflowTriggerId(Guid.NewGuid()),
             TriggerType = TriggerType.Manual,
-            CorrelationId = Guid.NewGuid().ToString("N"),
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid()),
             RequestedAt = DateTime.UtcNow
         };
 

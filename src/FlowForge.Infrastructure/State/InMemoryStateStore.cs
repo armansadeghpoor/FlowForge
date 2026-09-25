@@ -232,6 +232,23 @@ public sealed class InMemoryStateStore : IStateStore
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<WorkflowExecution>> FindExecutionsByCorrelationIdAsync(
+        ExecutionCorrelationId correlationId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<WorkflowExecution> executions = Array.AsReadOnly(
+            _executions.Values
+                .Where(execution => execution.CorrelationId == correlationId)
+                .OrderBy(execution => execution.CreatedAt)
+                .ThenBy(execution => execution.Id.Value)
+                .Select(Snapshot)
+                .ToArray());
+        return Task.FromResult(executions);
+    }
+
+    /// <inheritdoc />
     public Task<NodeExecutionState?> GetNodeExecutionAsync(
         WorkflowExecutionId executionId,
         NodeExecutionId nodeExecutionId,

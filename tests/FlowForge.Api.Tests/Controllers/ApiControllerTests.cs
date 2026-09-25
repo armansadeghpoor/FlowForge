@@ -110,6 +110,7 @@ public sealed class ApiControllerTests
     public async Task ExecutionQueries_ReturnSummaryAndTimelineDtos()
     {
         var executionId = new WorkflowExecutionId(Guid.NewGuid());
+        var correlationId = new ExecutionCorrelationId(Guid.NewGuid());
         var history = new ExecutionHistoryEntry
         {
             Id = new ExecutionHistoryId(Guid.NewGuid()),
@@ -125,6 +126,7 @@ public sealed class ApiControllerTests
                 new ExecutionSummary
                 {
                     WorkflowExecutionId = executionId,
+                    CorrelationId = correlationId,
                     Status = WorkflowExecutionStatus.Running,
                     DefinitionVersion = "2.0",
                     StartedAt = DateTime.UtcNow,
@@ -155,11 +157,50 @@ public sealed class ApiControllerTests
         var summary = Assert.IsType<ExecutionSummaryDto>(
             Assert.IsType<OkObjectResult>(summaryResult).Value);
         Assert.Equal("Running", summary.Status);
+        Assert.Equal(correlationId.Value, summary.CorrelationId);
         Assert.Equal(1, summary.NodeExecutionCounts.Running);
 
         var timeline = Assert.IsType<ExecutionTimelineEntryDto[]>(
             Assert.IsType<OkObjectResult>(timelineResult).Value);
         Assert.Equal("WorkflowCreated", Assert.Single(timeline).EventType);
+    }
+
+    [Fact]
+    public async Task ExecutionCorrelationQuery_ReturnsMatchingSummaries()
+    {
+        var correlationId = new ExecutionCorrelationId(Guid.NewGuid());
+        var summary = new ExecutionSummary
+        {
+            WorkflowExecutionId = new WorkflowExecutionId(Guid.NewGuid()),
+            CorrelationId = correlationId,
+            Status = WorkflowExecutionStatus.Succeeded,
+            DefinitionVersion = "1.0",
+            StartedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow,
+            OwnerId = null,
+            LastHeartbeatAt = null,
+            NodeExecutionCounts = new NodeExecutionCounts
+            {
+                Total = 0,
+                Pending = 0,
+                Running = 0,
+                Succeeded = 0,
+                Failed = 0,
+                Cancelled = 0
+            }
+        };
+        var service = new ExecutionQueryServiceStub
+        {
+            CorrelationResult =
+                ApplicationResult<IReadOnlyList<ExecutionSummary>>.Success([summary])
+        };
+
+        var result = await new ExecutionsController(service)
+            .FindExecutionsByCorrelationIdAsync(correlationId.Value, CancellationToken.None);
+
+        var response = Assert.IsType<ExecutionSummaryDto[]>(
+            Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Equal(correlationId.Value, Assert.Single(response).CorrelationId);
     }
 
     [Fact]
@@ -306,9 +347,16 @@ public sealed class ApiControllerTests
         public ApplicationResult<IReadOnlyList<ExecutionHistoryEntry>> TimelineResult { get; init; } =
             ApplicationResult<IReadOnlyList<ExecutionHistoryEntry>>.Success([]);
 
+        public ApplicationResult<IReadOnlyList<ExecutionSummary>> CorrelationResult { get; init; } =
+            ApplicationResult<IReadOnlyList<ExecutionSummary>>.Success([]);
+
         public Task<ApplicationResult<ExecutionSummary>> GetSummaryAsync(
             WorkflowExecutionId executionId,
             CancellationToken cancellationToken) => Task.FromResult(SummaryResult);
+
+        public Task<ApplicationResult<IReadOnlyList<ExecutionSummary>>> FindExecutionsByCorrelationIdAsync(
+            ExecutionCorrelationId correlationId,
+            CancellationToken cancellationToken) => Task.FromResult(CorrelationResult);
 
         public Task<ApplicationResult<IReadOnlyList<ExecutionHistoryEntry>>> GetTimelineAsync(
             WorkflowExecutionId executionId,

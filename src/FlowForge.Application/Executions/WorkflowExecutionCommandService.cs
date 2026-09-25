@@ -91,7 +91,7 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
                 "Only manual triggers can be executed.");
         }
 
-        if (string.IsNullOrWhiteSpace(context.CorrelationId))
+        if (context.CorrelationId.Value == Guid.Empty)
         {
             return new ApplicationError(
                 "CorrelationIdRequired",

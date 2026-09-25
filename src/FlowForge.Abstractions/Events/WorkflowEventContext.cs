@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlowForge.Core.Domain.Identifiers;
 
 namespace FlowForge.Abstractions.Events;
 
@@ -25,5 +26,5 @@ public sealed record WorkflowEventContext
     /// <summary>
     /// Gets the event correlation identifier.
     /// </summary>
-    public required string CorrelationId { get; init; }
+    public required ExecutionCorrelationId CorrelationId { get; init; }
 }

@@ -1,6 +1,7 @@
 using FlowForge.Abstractions.Engine;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Executions;
+using FlowForge.Core.Domain.Identifiers;
 
 namespace FlowForge.Engine.Execution;
 
@@ -25,5 +26,19 @@ public sealed class WorkflowEngine : IWorkflowEngine
     public Task<WorkflowExecution> ExecuteAsync(
         WorkflowDefinition workflow,
         CancellationToken cancellationToken) =>
-        _workflowExecutor.ExecuteAsync(workflow, cancellationToken);
+        ExecuteAsync(
+            workflow,
+            new WorkflowExecutionRequest
+            {
+                ExecutionRequestId = new ExecutionRequestId(Guid.NewGuid()),
+                CorrelationId = new ExecutionCorrelationId(Guid.NewGuid())
+            },
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<WorkflowExecution> ExecuteAsync(
+        WorkflowDefinition workflow,
+        WorkflowExecutionRequest request,
+        CancellationToken cancellationToken) =>
+        _workflowExecutor.ExecuteAsync(workflow, request, cancellationToken);
 }

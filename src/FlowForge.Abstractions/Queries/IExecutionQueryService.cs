@@ -19,6 +19,13 @@ public interface IExecutionQueryService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds execution summaries associated with a correlation identifier.
+    /// </summary>
+    Task<IReadOnlyList<ExecutionSummary>> FindExecutionsByCorrelationIdAsync(
+        ExecutionCorrelationId correlationId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gets the ordered audit timeline for a workflow execution.
     /// </summary>
     /// <param name="executionId">The workflow execution identifier.</param>

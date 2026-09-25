@@ -64,10 +64,39 @@ public sealed class ExecutionQueryServiceTests
         Assert.Same(timeline, result.Value);
     }
 
+    [Fact]
+    public async Task FindExecutionsByCorrelationIdAsync_ExistingCorrelation_ReturnsSummaries()
+    {
+        var summary = CreateSummary();
+        var service = new WorkflowExecutionQueryService(
+            new FakeExecutionQueryService { CorrelatedSummaries = [summary] });
+
+        var result = await service.FindExecutionsByCorrelationIdAsync(
+            summary.CorrelationId,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(summary, Assert.Single(result.Value!));
+    }
+
+    [Fact]
+    public async Task FindExecutionsByCorrelationIdAsync_MissingCorrelation_ReturnsEmptyResult()
+    {
+        var service = new WorkflowExecutionQueryService(new FakeExecutionQueryService());
+
+        var result = await service.FindExecutionsByCorrelationIdAsync(
+            new ExecutionCorrelationId(Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value!);
+    }
+
     private static ExecutionSummary CreateSummary() =>
         new()
         {
             WorkflowExecutionId = new WorkflowExecutionId(Guid.NewGuid()),
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid()),
             Status = WorkflowExecutionStatus.Succeeded,
             DefinitionVersion = "v1",
             StartedAt = new DateTime(2026, 9, 24, 18, 0, 0, DateTimeKind.Utc),
@@ -92,10 +121,17 @@ public sealed class ExecutionQueryServiceTests
         public IReadOnlyList<ExecutionHistoryEntry> Timeline { get; init; } =
             Array.Empty<ExecutionHistoryEntry>();
 
+        public IReadOnlyList<ExecutionSummary> CorrelatedSummaries { get; init; } = [];
+
         public Task<ExecutionSummary?> GetSummaryAsync(
             WorkflowExecutionId executionId,
             CancellationToken cancellationToken) =>
             Task.FromResult(Summary);
+
+        public Task<IReadOnlyList<ExecutionSummary>> FindExecutionsByCorrelationIdAsync(
+            ExecutionCorrelationId correlationId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(CorrelatedSummaries);
 
         public Task<IReadOnlyList<ExecutionHistoryEntry>> GetTimelineAsync(
             WorkflowExecutionId executionId,

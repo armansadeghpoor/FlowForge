@@ -38,7 +38,7 @@ public sealed class EventsControllerTests
         var response = Assert.IsType<WorkflowEventDispatchDto>(ok.Value);
         Assert.Equal("Order.Created", response.EventType);
         Assert.Equal(executionId.Value, Assert.Single(response.Executions).WorkflowExecutionId);
-        Assert.Equal(service.Context!.CorrelationId, response.CorrelationId);
+        Assert.Equal(service.Context!.CorrelationId.Value, response.CorrelationId);
     }
 
     [Fact]

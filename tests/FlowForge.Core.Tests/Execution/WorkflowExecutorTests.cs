@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using FlowForge.Abstractions.Execution;
+using FlowForge.Abstractions.Engine;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
@@ -45,6 +46,9 @@ public sealed class WorkflowExecutorTests
         var nodeState = Assert.Single(execution.Nodes);
         Assert.Equal(node.Id, context.NodeDefinition.Id);
         Assert.Equal(execution.Id, context.WorkflowExecutionId);
+        Assert.NotEqual(Guid.Empty, execution.CorrelationId.Value);
+        Assert.Equal(execution.CorrelationId, context.CorrelationId);
+        Assert.Equal(execution.CorrelationId, nodeState.CorrelationId);
         Assert.Equal(nodeState.Id, context.NodeExecutionId);
         Assert.Equal(1, context.AttemptNumber);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, execution.Status);
@@ -57,6 +61,7 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(workflow.Version, storedExecution.DefinitionVersion);
         Assert.Equal(execution.CompletedAt, storedExecution.CompletedAt);
         Assert.Equal(nodeState, Assert.Single(storedExecution.Nodes));
+        Assert.Equal(execution.CorrelationId, storedExecution.CorrelationId);
         Assert.NotNull(storedNode);
         Assert.Equal(NodeExecutionStatus.Succeeded, storedNode.Status);
         Assert.Equal(
@@ -72,6 +77,52 @@ public sealed class WorkflowExecutorTests
             nodeState.Id,
             history.Single(entry => entry.EventType == ExecutionHistoryEventType.NodeStarted)
                 .NodeExecutionId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExplicitCorrelation_PropagatesToExecutionNodeAndHistory()
+    {
+        var correlationId = new ExecutionCorrelationId(Guid.NewGuid());
+        var requestId = new ExecutionRequestId(Guid.NewGuid());
+        var contexts = new ConcurrentQueue<NodeExecutionContext>();
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
+            "test",
+            (context, _) =>
+            {
+                contexts.Enqueue(context);
+                return Task.FromResult(Succeeded());
+            }));
+
+        var execution = await engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            new WorkflowExecutionRequest
+            {
+                ExecutionRequestId = requestId,
+                CorrelationId = correlationId
+            },
+            CancellationToken.None);
+        var stored = await stateStore.GetExecutionAsync(execution.Id, CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(correlationId, execution.CorrelationId);
+        Assert.Equal(correlationId, Assert.Single(contexts).CorrelationId);
+        Assert.Equal(correlationId, Assert.Single(execution.Nodes).CorrelationId);
+        Assert.NotNull(stored);
+        Assert.Equal(correlationId, stored.CorrelationId);
+        Assert.Equal(correlationId, Assert.Single(stored.Nodes).CorrelationId);
+        Assert.NotEmpty(history);
+        Assert.All(history, entry =>
+        {
+            Assert.Equal(
+                correlationId.Value,
+                entry.Metadata?.GetProperty("correlationId").GetGuid());
+            Assert.Equal(
+                requestId.Value,
+                entry.Metadata?.GetProperty("executionRequestId").GetGuid());
+        });
     }
 
     [Fact]

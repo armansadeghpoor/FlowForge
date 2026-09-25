@@ -1,3 +1,5 @@
+using System.Text.Json;
+using FlowForge.Abstractions.Engine;
 using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Nodes;
 using FlowForge.Abstractions.State;
@@ -47,9 +49,11 @@ public sealed class WorkflowExecutor
     /// <returns>The resulting workflow execution snapshot.</returns>
     public async Task<WorkflowExecution> ExecuteAsync(
         WorkflowDefinition workflow,
+        WorkflowExecutionRequest request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(workflow);
+        ArgumentNullException.ThrowIfNull(request);
 
         if (!WorkflowGraph.TryCreate(workflow, out var graph, out var validationResult))
         {
@@ -66,6 +70,7 @@ public sealed class WorkflowExecutor
         {
             Id = new WorkflowExecutionId(Guid.NewGuid()),
             WorkflowId = new WorkflowId(workflow.Id.Value),
+            CorrelationId = request.CorrelationId,
             DefinitionVersion = workflow.Version,
             Status = WorkflowExecutionStatus.Running,
             CreatedAt = startedAt,
@@ -81,12 +86,14 @@ public sealed class WorkflowExecutor
             null,
             ExecutionHistoryEventType.WorkflowCreated,
             execution.CreatedAt,
+            request,
             cancellationToken);
         await AppendHistoryAsync(
             execution.Id,
             null,
             ExecutionHistoryEventType.WorkflowStarted,
             startedAt,
+            request,
             cancellationToken);
 
         var nodesById = workflow.Nodes.ToDictionary(node => node.Id);
@@ -98,6 +105,7 @@ public sealed class WorkflowExecutor
                 .Select(nodeId => ExecuteNodeAsync(
                     nodesById[nodeId],
                     execution.Id,
+                    request,
                     cancellationToken))
                 .ToArray();
             var layerStates = await Task.WhenAll(layerTasks);
@@ -110,6 +118,7 @@ public sealed class WorkflowExecutor
                     execution,
                     WorkflowExecutionStatus.Failed,
                     nodeStates,
+                    request,
                     cancellationToken);
             }
         }
@@ -118,12 +127,14 @@ public sealed class WorkflowExecutor
             execution,
             WorkflowExecutionStatus.Succeeded,
             nodeStates,
+            request,
             cancellationToken);
     }
 
     private async Task<NodeExecutionState> ExecuteNodeAsync(
         NodeDefinition node,
         WorkflowExecutionId executionId,
+        WorkflowExecutionRequest request,
         CancellationToken cancellationToken)
     {
         var startedAt = DateTime.UtcNow;
@@ -131,6 +142,7 @@ public sealed class WorkflowExecutor
         {
             NodeDefinition = node,
             WorkflowExecutionId = executionId,
+            CorrelationId = request.CorrelationId,
             NodeExecutionId = new NodeExecutionId(Guid.NewGuid()),
             AttemptNumber = 1
         };
@@ -138,6 +150,7 @@ public sealed class WorkflowExecutor
         {
             Id = context.NodeExecutionId,
             NodeId = node.Id,
+            CorrelationId = request.CorrelationId,
             Status = NodeExecutionStatus.Running,
             RetryCount = 0,
             AttemptNumber = context.AttemptNumber,
@@ -155,6 +168,7 @@ public sealed class WorkflowExecutor
             nodeExecution.Id,
             ExecutionHistoryEventType.NodeStarted,
             startedAt,
+            request,
             cancellationToken);
 
         var runner = _nodeRunnerRegistry.Get(node.Type);
@@ -180,6 +194,7 @@ public sealed class WorkflowExecutor
                 failedNodeExecution.Id,
                 ExecutionHistoryEventType.NodeFailed,
                 missingRunnerCompletedAt,
+                request,
                 cancellationToken);
 
             return failedNodeExecution;
@@ -224,6 +239,7 @@ public sealed class WorkflowExecutor
                 ? ExecutionHistoryEventType.NodeCompleted
                 : ExecutionHistoryEventType.NodeFailed,
             completedAt,
+            request,
             cancellationToken);
 
         return completedNodeExecution;
@@ -233,6 +249,7 @@ public sealed class WorkflowExecutor
         WorkflowExecution execution,
         WorkflowExecutionStatus status,
         IEnumerable<NodeExecutionState> nodeStates,
+        WorkflowExecutionRequest request,
         CancellationToken cancellationToken)
     {
         var completedAt = DateTime.UtcNow;
@@ -255,6 +272,7 @@ public sealed class WorkflowExecutor
                     $"Cannot record completion history for workflow status '{status}'.")
             },
             completedAt,
+            request,
             cancellationToken);
 
         return execution with
@@ -270,6 +288,7 @@ public sealed class WorkflowExecutor
         NodeExecutionId? nodeExecutionId,
         ExecutionHistoryEventType eventType,
         DateTime timestamp,
+        WorkflowExecutionRequest request,
         CancellationToken cancellationToken) =>
         _stateStore.AppendExecutionHistoryAsync(
             new ExecutionHistoryEntry
@@ -279,7 +298,11 @@ public sealed class WorkflowExecutor
                 NodeExecutionId = nodeExecutionId,
                 EventType = eventType,
                 Timestamp = timestamp,
-                Metadata = null
+                Metadata = JsonSerializer.SerializeToElement(new
+                {
+                    correlationId = request.CorrelationId.Value,
+                    executionRequestId = request.ExecutionRequestId.Value
+                })
             },
             cancellationToken);
 }

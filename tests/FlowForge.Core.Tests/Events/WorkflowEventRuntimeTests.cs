@@ -90,7 +90,7 @@ public sealed class WorkflowEventRuntimeTests
             EventType = "Order.Created",
             Payload = JsonSerializer.SerializeToElement(new { orderId = 42 }),
             OccurredAt = new DateTime(2026, 9, 25, 14, 0, 0, DateTimeKind.Utc),
-            CorrelationId = "correlation-42"
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid())
         };
 
     private static WorkflowEventTrigger CreateEventTrigger() =>

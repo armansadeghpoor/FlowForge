@@ -46,7 +46,7 @@ public sealed class TriggerExecutionsController : ControllerBase
             ExecutionRequestId = executionRequestIdResult.Id,
             TriggerId = new WorkflowTriggerId(id),
             TriggerType = TriggerType.Manual,
-            CorrelationId = Guid.NewGuid().ToString("N"),
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid()),
             RequestedAt = DateTime.UtcNow
         };
         var result = await _service.ExecuteTriggerAsync(context, cancellationToken);
@@ -62,7 +62,7 @@ public sealed class TriggerExecutionsController : ControllerBase
                 ExecutionRequestId = context.ExecutionRequestId.Value,
                 WorkflowExecutionId = result.Value.Value,
                 TriggerId = context.TriggerId.Value,
-                CorrelationId = context.CorrelationId,
+                CorrelationId = context.CorrelationId.Value,
                 RequestedAt = context.RequestedAt
             });
     }

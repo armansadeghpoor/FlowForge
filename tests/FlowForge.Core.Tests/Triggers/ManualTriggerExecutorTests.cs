@@ -20,10 +20,13 @@ public sealed class ManualTriggerExecutorTests
         var trigger = CreateTrigger(definition);
         var engine = new WorkflowEngineStub(CreateExecution());
         var executor = CreateExecutor(trigger, definition, engine);
+        var context = CreateContext(trigger.Id);
 
-        await executor.ExecuteAsync(CreateContext(trigger.Id), CancellationToken.None);
+        await executor.ExecuteAsync(context, CancellationToken.None);
 
         Assert.Same(definition, engine.ExecutedDefinition);
+        Assert.Equal(context.ExecutionRequestId, engine.ExecutionRequest?.ExecutionRequestId);
+        Assert.Equal(context.CorrelationId, engine.ExecutionRequest?.CorrelationId);
         Assert.Equal(1, engine.ExecutionCount);
     }
 
@@ -96,7 +99,7 @@ public sealed class ManualTriggerExecutorTests
             ExecutionRequestId = new ExecutionRequestId(Guid.NewGuid()),
             TriggerId = triggerId,
             TriggerType = TriggerType.Manual,
-            CorrelationId = Guid.NewGuid().ToString("N"),
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid()),
             RequestedAt = DateTime.UtcNow
         };
 
@@ -170,6 +173,8 @@ public sealed class ManualTriggerExecutorTests
     {
         public WorkflowDefinition? ExecutedDefinition { get; private set; }
 
+        public WorkflowExecutionRequest? ExecutionRequest { get; private set; }
+
         public int ExecutionCount { get; private set; }
 
         public Task<WorkflowExecution> ExecuteAsync(
@@ -179,6 +184,17 @@ public sealed class ManualTriggerExecutorTests
             ExecutedDefinition = workflow;
             ExecutionCount++;
             return Task.FromResult(execution);
+        }
+
+        public Task<WorkflowExecution> ExecuteAsync(
+            WorkflowDefinition workflow,
+            WorkflowExecutionRequest request,
+            CancellationToken cancellationToken)
+        {
+            ExecutedDefinition = workflow;
+            ExecutionRequest = request;
+            ExecutionCount++;
+            return Task.FromResult(execution with { CorrelationId = request.CorrelationId });
         }
     }
 }

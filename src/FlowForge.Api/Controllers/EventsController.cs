@@ -2,6 +2,7 @@ using FlowForge.Abstractions.Events;
 using FlowForge.Api.Contracts;
 using FlowForge.Api.Errors;
 using FlowForge.Application.Events;
+using FlowForge.Core.Domain.Identifiers;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowForge.Api.Controllers;
@@ -37,7 +38,7 @@ public sealed class EventsController : ControllerBase
             EventType = request.EventType,
             Payload = request.Payload.Clone(),
             OccurredAt = DateTime.UtcNow,
-            CorrelationId = Guid.NewGuid().ToString("N")
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid())
         };
         var result = await _service.DispatchAsync(context, cancellationToken);
         if (!result.IsSuccess)
@@ -48,7 +49,7 @@ public sealed class EventsController : ControllerBase
         return Ok(new WorkflowEventDispatchDto
         {
             EventType = context.EventType,
-            CorrelationId = context.CorrelationId,
+            CorrelationId = context.CorrelationId.Value,
             OccurredAt = context.OccurredAt,
             Executions = Array.AsReadOnly(result.Value!
                 .Select(execution => new EventExecutionResultDto

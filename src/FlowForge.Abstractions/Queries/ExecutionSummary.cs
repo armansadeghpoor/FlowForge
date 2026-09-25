@@ -10,6 +10,8 @@ public sealed record ExecutionSummary
 {
     public required WorkflowExecutionId WorkflowExecutionId { get; init; }
 
+    public required ExecutionCorrelationId CorrelationId { get; init; }
+
     public required WorkflowExecutionStatus Status { get; init; }
 
     public required string DefinitionVersion { get; init; }

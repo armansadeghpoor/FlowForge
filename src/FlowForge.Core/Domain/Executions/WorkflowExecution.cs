@@ -13,6 +13,11 @@ public sealed record WorkflowExecution
     public required WorkflowId WorkflowId { get; init; }
 
     /// <summary>
+    /// Gets the correlation identifier shared across the execution lifecycle.
+    /// </summary>
+    public ExecutionCorrelationId CorrelationId { get; init; }
+
+    /// <summary>
     /// Gets the version of the workflow definition used to create this execution.
     /// </summary>
     public required string DefinitionVersion { get; init; }

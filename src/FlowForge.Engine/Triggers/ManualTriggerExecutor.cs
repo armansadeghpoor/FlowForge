@@ -78,6 +78,11 @@ public sealed class ManualTriggerExecutor : IWorkflowTriggerExecutor
 
         var execution = await _workflowEngine.ExecuteAsync(
             definition,
+            new WorkflowExecutionRequest
+            {
+                ExecutionRequestId = context.ExecutionRequestId,
+                CorrelationId = context.CorrelationId
+            },
             cancellationToken);
         return execution.Id;
     }

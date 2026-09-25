@@ -125,6 +125,16 @@ public interface IStateStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds complete workflow execution aggregates by correlation identifier.
+    /// </summary>
+    /// <param name="correlationId">The execution correlation identifier.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>Matching executions, or an empty collection when none exist.</returns>
+    Task<IReadOnlyList<WorkflowExecution>> FindExecutionsByCorrelationIdAsync(
+        ExecutionCorrelationId correlationId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gets an individual node execution state.
     /// </summary>
     /// <param name="executionId">The containing workflow execution identifier.</param>

@@ -26,7 +26,7 @@ public sealed record WorkflowTriggerExecutionContext
     /// <summary>
     /// Gets the correlation identifier for the execution request.
     /// </summary>
-    public required string CorrelationId { get; init; }
+    public required ExecutionCorrelationId CorrelationId { get; init; }
 
     /// <summary>
     /// Gets the time at which execution was requested.

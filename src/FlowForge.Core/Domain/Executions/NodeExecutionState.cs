@@ -14,6 +14,11 @@ public sealed record NodeExecutionState
 
     public required NodeId NodeId { get; init; }
 
+    /// <summary>
+    /// Gets the correlation identifier shared with the workflow execution.
+    /// </summary>
+    public ExecutionCorrelationId CorrelationId { get; init; }
+
     public required NodeExecutionStatus Status { get; init; }
 
     public required int RetryCount { get; init; }

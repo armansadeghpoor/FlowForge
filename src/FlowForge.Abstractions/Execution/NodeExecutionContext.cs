@@ -14,6 +14,11 @@ public sealed record NodeExecutionContext
     public required WorkflowExecutionId WorkflowExecutionId { get; init; }
 
     /// <summary>
+    /// Gets the correlation identifier shared with the workflow execution.
+    /// </summary>
+    public ExecutionCorrelationId CorrelationId { get; init; }
+
+    /// <summary>
     /// Gets the node execution identifier, shared across attempts.
     /// </summary>
     public required NodeExecutionId NodeExecutionId { get; init; }

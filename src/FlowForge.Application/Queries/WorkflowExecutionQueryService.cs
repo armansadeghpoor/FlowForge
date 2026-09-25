@@ -91,6 +91,36 @@ public sealed class WorkflowExecutionQueryService : IWorkflowExecutionQueryServi
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ApplicationResult<IReadOnlyList<ExecutionSummary>>> FindExecutionsByCorrelationIdAsync(
+        ExecutionCorrelationId correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (correlationId.Value == Guid.Empty)
+        {
+            return ApplicationResult<IReadOnlyList<ExecutionSummary>>.Failure(
+                new ApplicationError(
+                    "CorrelationIdRequired",
+                    "An execution correlation identifier is required."));
+        }
+
+        try
+        {
+            var summaries = await _queryService.FindExecutionsByCorrelationIdAsync(
+                correlationId,
+                cancellationToken);
+            return ApplicationResult<IReadOnlyList<ExecutionSummary>>.Success(summaries);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return ApplicationResult<IReadOnlyList<ExecutionSummary>>.Failure(QueryError());
+        }
+    }
+
     private static ApplicationError QueryError() =>
         new("ExecutionQueryFailed", "The workflow execution query failed.");
 }

@@ -20,34 +20,35 @@ public sealed class PostgreSqlStateStore : IStateStore
     private const string InsertWorkflowSql =
         """
         INSERT INTO workflow_executions
-            (id, workflow_id, definition_version, status, started_at,
+            (id, workflow_id, correlation_id, definition_version, status, started_at,
              completed_at, created_at, owner_id, last_heartbeat_at)
         VALUES
-            (@Id, @WorkflowId, @DefinitionVersion, @Status, @StartedAt,
+            (@Id, @WorkflowId, @CorrelationId, @DefinitionVersion, @Status, @StartedAt,
              @CompletedAt, @CreatedAt, @OwnerId, @LastHeartbeatAt);
         """;
 
     private const string InsertNodeSql =
         """
         INSERT INTO node_executions
-            (id, workflow_execution_id, node_id, status, attempt_number,
+            (id, workflow_execution_id, node_id, correlation_id, status, attempt_number,
              output, failure, started_at, completed_at)
         VALUES
-            (@Id, @WorkflowExecutionId, @NodeId, @Status, @AttemptNumber,
+            (@Id, @WorkflowExecutionId, @NodeId, @CorrelationId, @Status, @AttemptNumber,
              CAST(@Output AS jsonb), CAST(@Failure AS jsonb), @StartedAt, @CompletedAt);
         """;
 
     private const string SaveNodeSql =
         """
         INSERT INTO node_executions
-            (id, workflow_execution_id, node_id, status, attempt_number,
+            (id, workflow_execution_id, node_id, correlation_id, status, attempt_number,
              output, failure, started_at, completed_at)
         VALUES
-            (@Id, @WorkflowExecutionId, @NodeId, @Status, @AttemptNumber,
+            (@Id, @WorkflowExecutionId, @NodeId, @CorrelationId, @Status, @AttemptNumber,
              CAST(@Output AS jsonb), CAST(@Failure AS jsonb), @StartedAt, @CompletedAt)
         ON CONFLICT (id) DO UPDATE SET
             workflow_execution_id = EXCLUDED.workflow_execution_id,
             node_id = EXCLUDED.node_id,
+            correlation_id = EXCLUDED.correlation_id,
             status = EXCLUDED.status,
             attempt_number = EXCLUDED.attempt_number,
             output = EXCLUDED.output,
@@ -98,6 +99,7 @@ public sealed class PostgreSqlStateStore : IStateStore
                 {
                     Id = execution.Id.Value,
                     WorkflowId = execution.WorkflowId.Value,
+                    CorrelationId = execution.CorrelationId.Value,
                     execution.DefinitionVersion,
                     Status = execution.Status.ToString(),
                     StartedAt = ToDatabaseTimestamp(execution.StartedAt),
@@ -207,6 +209,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             """
             SELECT id AS Id,
                    workflow_id AS WorkflowId,
+                   correlation_id AS CorrelationId,
                    definition_version AS DefinitionVersion,
                    status AS Status,
                    started_at AS StartedAt,
@@ -224,6 +227,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             SELECT id AS Id,
                    workflow_execution_id AS WorkflowExecutionId,
                    node_id AS NodeId,
+                   correlation_id AS CorrelationId,
                    status AS Status,
                    attempt_number AS AttemptNumber,
                    output::text AS Output,
@@ -245,6 +249,71 @@ public sealed class PostgreSqlStateStore : IStateStore
                     RunningStatus = WorkflowExecutionStatus.Running.ToString(),
                     Threshold = ToDatabaseTimestamp(threshold)
                 },
+                cancellationToken: cancellationToken))).ToArray();
+
+        if (workflowRows.Length == 0)
+        {
+            return Array.Empty<WorkflowExecution>();
+        }
+
+        var nodeRows = await connection.QueryAsync<NodeExecutionRow>(new CommandDefinition(
+            nodesSql,
+            new { WorkflowExecutionIds = workflowRows.Select(row => row.Id).ToArray() },
+            cancellationToken: cancellationToken));
+        var nodesByExecution = nodeRows.ToLookup(row => row.WorkflowExecutionId);
+        var executions = workflowRows
+            .Select(workflow => MapWorkflowExecution(
+                workflow,
+                nodesByExecution[workflow.Id].Select(MapNodeExecution)))
+            .ToArray();
+
+        return Array.AsReadOnly(executions);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WorkflowExecution>> FindExecutionsByCorrelationIdAsync(
+        ExecutionCorrelationId correlationId,
+        CancellationToken cancellationToken)
+    {
+        const string workflowsSql =
+            """
+            SELECT id AS Id,
+                   workflow_id AS WorkflowId,
+                   correlation_id AS CorrelationId,
+                   definition_version AS DefinitionVersion,
+                   status AS Status,
+                   started_at AS StartedAt,
+                   completed_at AS CompletedAt,
+                   created_at AS CreatedAt,
+                   owner_id AS OwnerId,
+                   last_heartbeat_at AS LastHeartbeatAt
+            FROM workflow_executions
+            WHERE correlation_id = @CorrelationId
+            ORDER BY created_at, id;
+            """;
+        const string nodesSql =
+            """
+            SELECT id AS Id,
+                   workflow_execution_id AS WorkflowExecutionId,
+                   node_id AS NodeId,
+                   correlation_id AS CorrelationId,
+                   status AS Status,
+                   attempt_number AS AttemptNumber,
+                   output::text AS Output,
+                   failure::text AS Failure,
+                   started_at AS StartedAt,
+                   completed_at AS CompletedAt
+            FROM node_executions
+            WHERE workflow_execution_id = ANY(@WorkflowExecutionIds)
+            ORDER BY workflow_execution_id, started_at NULLS FIRST, id;
+            """;
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        var workflowRows = (await connection.QueryAsync<WorkflowExecutionRow>(
+            new CommandDefinition(
+                workflowsSql,
+                new { CorrelationId = correlationId.Value },
                 cancellationToken: cancellationToken))).ToArray();
 
         if (workflowRows.Length == 0)
@@ -433,6 +502,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             """
             SELECT id AS Id,
                    workflow_id AS WorkflowId,
+                   correlation_id AS CorrelationId,
                    definition_version AS DefinitionVersion,
                    status AS Status,
                    started_at AS StartedAt,
@@ -447,6 +517,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             """
             SELECT id AS Id,
                    node_id AS NodeId,
+                   correlation_id AS CorrelationId,
                    status AS Status,
                    attempt_number AS AttemptNumber,
                    output::text AS Output,
@@ -484,6 +555,7 @@ public sealed class PostgreSqlStateStore : IStateStore
         {
             Id = new WorkflowExecutionId(workflow.Id),
             WorkflowId = new WorkflowId(workflow.WorkflowId),
+            CorrelationId = new ExecutionCorrelationId(workflow.CorrelationId),
             DefinitionVersion = workflow.DefinitionVersion
                 ?? throw new InvalidOperationException(
                     "Stored workflow definition version is missing."),
@@ -506,6 +578,7 @@ public sealed class PostgreSqlStateStore : IStateStore
             """
             SELECT id AS Id,
                    node_id AS NodeId,
+                   correlation_id AS CorrelationId,
                    status AS Status,
                    attempt_number AS AttemptNumber,
                    output::text AS Output,
@@ -539,6 +612,7 @@ public sealed class PostgreSqlStateStore : IStateStore
         parameters.Add("Id", nodeExecution.Id.Value);
         parameters.Add("WorkflowExecutionId", executionId.Value);
         parameters.Add("NodeId", nodeExecution.NodeId.Value);
+        parameters.Add("CorrelationId", nodeExecution.CorrelationId.Value);
         parameters.Add("Status", nodeExecution.Status.ToString());
         parameters.Add("AttemptNumber", nodeExecution.AttemptNumber);
         parameters.Add("Output", SerializeOutput(nodeExecution.Output));
@@ -553,6 +627,7 @@ public sealed class PostgreSqlStateStore : IStateStore
         {
             Id = new NodeExecutionId(row.Id),
             NodeId = new NodeId(row.NodeId),
+            CorrelationId = new ExecutionCorrelationId(row.CorrelationId),
             Status = ParseStatus<NodeExecutionStatus>(row.Status),
             RetryCount = Math.Max(0, row.AttemptNumber - 1),
             AttemptNumber = row.AttemptNumber,
@@ -662,6 +737,8 @@ public sealed class PostgreSqlStateStore : IStateStore
 
         public Guid WorkflowId { get; init; }
 
+        public Guid CorrelationId { get; init; }
+
         public string? DefinitionVersion { get; init; }
 
         public string? Status { get; init; }
@@ -684,6 +761,8 @@ public sealed class PostgreSqlStateStore : IStateStore
         public Guid WorkflowExecutionId { get; init; }
 
         public Guid NodeId { get; init; }
+
+        public Guid CorrelationId { get; init; }
 
         public string? Status { get; init; }
 

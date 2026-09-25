@@ -17,4 +17,16 @@ public interface IWorkflowEngine
     Task<WorkflowExecution> ExecuteAsync(
         WorkflowDefinition workflow,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Executes the supplied workflow definition with explicit request identity.
+    /// </summary>
+    /// <param name="workflow">The workflow definition to execute.</param>
+    /// <param name="request">The execution request identity.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <returns>The resulting workflow execution snapshot.</returns>
+    Task<WorkflowExecution> ExecuteAsync(
+        WorkflowDefinition workflow,
+        WorkflowExecutionRequest request,
+        CancellationToken cancellationToken);
 }

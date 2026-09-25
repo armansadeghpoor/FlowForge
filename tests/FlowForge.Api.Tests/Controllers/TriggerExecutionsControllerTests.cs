@@ -33,7 +33,7 @@ public sealed class TriggerExecutionsControllerTests
         Assert.Equal(requestId, response.ExecutionRequestId);
         Assert.Equal(executionId.Value, response.WorkflowExecutionId);
         Assert.Equal(triggerId, response.TriggerId);
-        Assert.False(string.IsNullOrWhiteSpace(response.CorrelationId));
+        Assert.NotEqual(Guid.Empty, response.CorrelationId);
         Assert.Equal(service.ReceivedContext!.RequestedAt, response.RequestedAt);
     }
 

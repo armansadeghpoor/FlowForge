@@ -112,7 +112,10 @@ public sealed class WorkflowScheduler : IWorkflowScheduler
                             System.Globalization.CultureInfo.InvariantCulture)),
                     TriggerId = schedule.WorkflowTriggerId,
                     TriggerType = TriggerType.Timer,
-                    CorrelationId = $"schedule:{schedule.Id.Value:N}:{occurrenceUtc.Ticks}",
+                    CorrelationId = new ExecutionCorrelationId(
+                        ExecutionRequestIdFactory.Create(
+                            schedule.Id.Value,
+                            $"correlation:{occurrenceUtc.Ticks}").Value),
                     RequestedAt = requestedAt
                 },
                 cancellationToken);

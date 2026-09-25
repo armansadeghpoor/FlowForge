@@ -88,6 +88,7 @@ internal static class ApiMappings
         new()
         {
             WorkflowExecutionId = summary.WorkflowExecutionId.Value,
+            CorrelationId = summary.CorrelationId.Value,
             Status = summary.Status.ToString(),
             DefinitionVersion = summary.DefinitionVersion,
             StartedAt = summary.StartedAt,

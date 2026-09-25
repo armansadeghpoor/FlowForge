@@ -53,7 +53,7 @@ public sealed class WorkflowEventServiceTests
             EventType = "Order.Created",
             Payload = JsonSerializer.SerializeToElement(new { orderId = 42 }),
             OccurredAt = DateTime.UtcNow,
-            CorrelationId = Guid.NewGuid().ToString("N")
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid())
         };
 
     private sealed class EventRuntimeStub : IWorkflowEventRuntime

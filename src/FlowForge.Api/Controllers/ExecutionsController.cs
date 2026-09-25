@@ -25,6 +25,25 @@ public sealed class ExecutionsController : ControllerBase
     }
 
     /// <summary>
+    /// Finds executions sharing a correlation identifier.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> FindExecutionsByCorrelationIdAsync(
+        [FromQuery] Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _service.FindExecutionsByCorrelationIdAsync(
+            new ExecutionCorrelationId(correlationId),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return ApplicationErrorMapper.ToActionResult(result.Errors);
+        }
+
+        return Ok(result.Value!.Select(summary => summary.ToDto()).ToArray());
+    }
+
+    /// <summary>
     /// Gets an execution summary.
     /// </summary>
     [HttpGet("{id:guid}")]

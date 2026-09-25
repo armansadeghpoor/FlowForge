@@ -25,6 +25,7 @@ public abstract class StateStoreConformanceTests
         Assert.NotNull(retrieved);
         Assert.Equal(execution.Id, retrieved.Id);
         Assert.Equal(execution.WorkflowId, retrieved.WorkflowId);
+        Assert.Equal(execution.CorrelationId, retrieved.CorrelationId);
         Assert.Equal(execution.DefinitionVersion, retrieved.DefinitionVersion);
         Assert.Equal(execution.Status, retrieved.Status);
         Assert.Equal(execution.CreatedAt, retrieved.CreatedAt);
@@ -189,6 +190,52 @@ public abstract class StateStoreConformanceTests
             CancellationToken.None);
 
         Assert.Null(retrieved);
+    }
+
+    [SkippableFact]
+    public async Task FindExecutionsByCorrelationIdAsync_ReturnsCompleteMatchingAggregates()
+    {
+        var store = CreateStore();
+        var correlationId = new ExecutionCorrelationId(Guid.NewGuid());
+        var execution = CreateExecution() with
+        {
+            CorrelationId = correlationId,
+            OwnerId = "correlated-worker"
+        };
+        var nodeExecution = CreateNodeExecution() with { CorrelationId = correlationId };
+        var unrelated = CreateExecution() with
+        {
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid())
+        };
+        await store.CreateExecutionAsync(execution, CancellationToken.None);
+        await store.CreateExecutionAsync(unrelated, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(
+            execution.Id,
+            nodeExecution,
+            CancellationToken.None);
+
+        var matches = await store.FindExecutionsByCorrelationIdAsync(
+            correlationId,
+            CancellationToken.None);
+
+        var match = Assert.Single(matches);
+        Assert.Equal(execution.Id, match.Id);
+        Assert.Equal(correlationId, match.CorrelationId);
+        Assert.Equal("correlated-worker", match.OwnerId);
+        Assert.Equal(nodeExecution, Assert.Single(match.Nodes));
+    }
+
+    [SkippableFact]
+    public async Task FindExecutionsByCorrelationIdAsync_MissingCorrelation_ReturnsEmptyCollection()
+    {
+        var store = CreateStore();
+        await store.CreateExecutionAsync(CreateExecution(), CancellationToken.None);
+
+        var matches = await store.FindExecutionsByCorrelationIdAsync(
+            new ExecutionCorrelationId(Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Empty(matches);
     }
 
     [SkippableFact]
@@ -726,6 +773,7 @@ public abstract class StateStoreConformanceTests
         {
             Id = new WorkflowExecutionId(Guid.NewGuid()),
             WorkflowId = new WorkflowId(Guid.NewGuid()),
+            CorrelationId = TestCorrelationId,
             DefinitionVersion = "test-v1",
             Status = WorkflowExecutionStatus.Pending,
             CreatedAt = Timestamp,
@@ -741,6 +789,7 @@ public abstract class StateStoreConformanceTests
         {
             Id = new NodeExecutionId(Guid.NewGuid()),
             NodeId = new NodeId(Guid.NewGuid()),
+            CorrelationId = TestCorrelationId,
             Status = NodeExecutionStatus.Running,
             RetryCount = 0,
             AttemptNumber = 1,
@@ -768,4 +817,7 @@ public abstract class StateStoreConformanceTests
 
     private static DateTime Timestamp { get; } =
         new(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+    private static ExecutionCorrelationId TestCorrelationId { get; } =
+        new(Guid.Parse("20000000-0000-0000-0000-000000000000"));
 }

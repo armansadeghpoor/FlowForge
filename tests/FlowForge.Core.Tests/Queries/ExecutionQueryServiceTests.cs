@@ -26,6 +26,7 @@ public sealed class ExecutionQueryServiceTests
 
         Assert.NotNull(summary);
         Assert.Equal(execution.Id, summary.WorkflowExecutionId);
+        Assert.Equal(execution.CorrelationId, summary.CorrelationId);
         Assert.Equal(WorkflowExecutionStatus.Succeeded, summary.Status);
         Assert.Equal(startedAt, summary.StartedAt);
         Assert.Equal(completedAt, summary.CompletedAt);
@@ -125,6 +126,34 @@ public sealed class ExecutionQueryServiceTests
         Assert.Empty(timeline);
     }
 
+    [Fact]
+    public async Task FindExecutionsByCorrelationIdAsync_ExistingCorrelation_ReturnsMatchingSummary()
+    {
+        var execution = CreateExecution();
+        var service = await CreateServiceAsync(execution);
+
+        var summaries = await service.FindExecutionsByCorrelationIdAsync(
+            execution.CorrelationId,
+            CancellationToken.None);
+
+        var summary = Assert.Single(summaries);
+        Assert.Equal(execution.Id, summary.WorkflowExecutionId);
+        Assert.Equal(execution.CorrelationId, summary.CorrelationId);
+    }
+
+    [Fact]
+    public async Task FindExecutionsByCorrelationIdAsync_MissingCorrelation_ReturnsEmptyCollection()
+    {
+        var execution = CreateExecution();
+        var service = await CreateServiceAsync(execution);
+
+        var summaries = await service.FindExecutionsByCorrelationIdAsync(
+            new ExecutionCorrelationId(Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Empty(summaries);
+    }
+
     private static async Task<ExecutionQueryService> CreateServiceAsync(
         WorkflowExecution execution)
     {
@@ -139,6 +168,7 @@ public sealed class ExecutionQueryServiceTests
         {
             Id = new WorkflowExecutionId(Guid.NewGuid()),
             WorkflowId = new WorkflowId(Guid.NewGuid()),
+            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid()),
             DefinitionVersion = "definition-v1",
             Status = WorkflowExecutionStatus.Running,
             CreatedAt = Timestamp,

@@ -49,7 +49,7 @@ public sealed record TriggerExecutionDto
 
     public required Guid TriggerId { get; init; }
 
-    public required string CorrelationId { get; init; }
+    public required Guid CorrelationId { get; init; }
 
     public required DateTime RequestedAt { get; init; }
 }

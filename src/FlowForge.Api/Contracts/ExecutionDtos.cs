@@ -9,6 +9,8 @@ public sealed record ExecutionSummaryDto
 {
     public required Guid WorkflowExecutionId { get; init; }
 
+    public required Guid CorrelationId { get; init; }
+
     public required string Status { get; init; }
 
     public required string DefinitionVersion { get; init; }

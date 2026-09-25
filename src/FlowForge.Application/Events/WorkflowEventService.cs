@@ -77,7 +77,7 @@ public sealed class WorkflowEventService : IWorkflowEventService
                 "An event occurrence timestamp is required."));
         }
 
-        if (string.IsNullOrWhiteSpace(context.CorrelationId))
+        if (context.CorrelationId.Value == Guid.Empty)
         {
             errors.Add(new ApplicationError(
                 "CorrelationIdRequired",
