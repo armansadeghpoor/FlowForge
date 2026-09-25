@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
 namespace FlowForge.Api.Contracts;
@@ -9,16 +10,20 @@ public sealed record CreateWorkflowDefinitionRequest
 {
     public required Guid Id { get; init; }
 
+    [Required]
     public required string Name { get; init; }
 
+    [Required]
     public required string Version { get; init; }
 
     public string? Description { get; init; }
 
     public required DateTime CreatedAt { get; init; }
 
+    [Required]
     public required IReadOnlyList<WorkflowNodeDto> Nodes { get; init; }
 
+    [Required]
     public required IReadOnlyList<WorkflowEdgeDto> Edges { get; init; }
 }
 
@@ -49,8 +54,10 @@ public sealed record WorkflowNodeDto
 {
     public required Guid Id { get; init; }
 
+    [Required]
     public required string Type { get; init; }
 
+    [Required]
     public required IReadOnlyDictionary<string, JsonElement> Configuration { get; init; }
 }
 

@@ -9,7 +9,7 @@ namespace FlowForge.Api.Controllers;
 /// Exposes read-only runtime diagnostics.
 /// </summary>
 [ApiController]
-[Route("api/diagnostics")]
+[Route("api/v1/diagnostics")]
 public sealed class DiagnosticsController : ControllerBase
 {
     private readonly IRuntimeDiagnosticsService _diagnosticsService;
@@ -33,7 +33,7 @@ public sealed class DiagnosticsController : ControllerBase
         var result = await _diagnosticsService.GetExecutionMetricsAsync(cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         var metrics = result.Value!;

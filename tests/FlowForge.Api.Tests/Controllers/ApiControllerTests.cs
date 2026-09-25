@@ -55,6 +55,8 @@ public sealed class ApiControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var response = Assert.IsType<ApiErrorResponse>(badRequest.Value);
+        Assert.Equal("DefinitionVersionRequired", response.Code);
+        Assert.False(string.IsNullOrWhiteSpace(response.CorrelationId));
         Assert.Equal("DefinitionVersionRequired", Assert.Single(response.Errors).Code);
     }
 

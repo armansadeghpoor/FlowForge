@@ -12,7 +12,7 @@ namespace FlowForge.Api.Controllers;
 /// Exposes workflow definition management operations.
 /// </summary>
 [ApiController]
-[Route("api/workflows")]
+[Route("api/v1/workflows")]
 public sealed class WorkflowDefinitionsController : ControllerBase
 {
     private readonly IWorkflowDefinitionService _service;
@@ -35,7 +35,7 @@ public sealed class WorkflowDefinitionsController : ControllerBase
         var result = await _service.ListAsync(cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return Ok(result.Value!.Select(definition => definition.ToDto()).ToArray());
@@ -56,17 +56,18 @@ public sealed class WorkflowDefinitionsController : ControllerBase
             cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         if (result.Value is null)
         {
             return ApplicationErrorMapper.ToActionResult(
-            [
-                new ApplicationError(
-                    "DefinitionNotFound",
-                    "The workflow definition version was not found.")
-            ]);
+                [
+                    new ApplicationError(
+                        "DefinitionNotFound",
+                        "The workflow definition version was not found.")
+                ],
+                HttpContext);
         }
 
         return Ok(result.Value.ToDto());
@@ -83,7 +84,7 @@ public sealed class WorkflowDefinitionsController : ControllerBase
         var result = await _service.CreateAsync(request.ToDomain(), cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         var response = result.Value!.ToDto();

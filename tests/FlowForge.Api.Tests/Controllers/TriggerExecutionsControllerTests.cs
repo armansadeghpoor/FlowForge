@@ -73,6 +73,28 @@ public sealed class TriggerExecutionsControllerTests
         Assert.NotEqual(default, service.ReceivedContext!.ExecutionRequestId);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_CorrelationHeader_IsPropagatedToExecutionContext()
+    {
+        var correlationId = Guid.NewGuid();
+        var service = new CommandServiceStub
+        {
+            Result = ApplicationResult<WorkflowExecutionId>.Success(
+                new WorkflowExecutionId(Guid.NewGuid()))
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+        controller.Request.Headers["X-Correlation-Id"] = correlationId.ToString();
+
+        var result = await controller.ExecuteAsync(
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.IsType<ObjectResult>(result);
+        Assert.Equal(
+            correlationId,
+            service.ReceivedContext!.CorrelationId.Value);
+    }
+
     private static TriggerExecutionsController CreateController(
         IWorkflowExecutionCommandService service,
         Guid? requestId)

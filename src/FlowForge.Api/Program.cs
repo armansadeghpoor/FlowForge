@@ -9,7 +9,7 @@ using FlowForge.Api.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddFlowForgeApi();
 builder.Services.AddFlowForgeConfiguration(builder.Configuration);
 builder.Services.AddScoped<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();
 builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
@@ -22,6 +22,9 @@ builder.Services.AddScoped<IWorkflowExecutionQueryService, WorkflowExecutionQuer
 
 var app = builder.Build();
 
+app.UseMiddleware<FlowForge.Api.Correlation.CorrelationIdMiddleware>();
+app.UseExceptionHandler();
+app.UseStatusCodePages(FlowForge.Api.Errors.ApiStatusCodeResponseWriter.WriteAsync);
 app.MapControllers();
 
 app.Run();

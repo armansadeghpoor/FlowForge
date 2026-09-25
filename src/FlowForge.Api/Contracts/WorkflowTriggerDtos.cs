@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
 namespace FlowForge.Api.Contracts;
@@ -11,12 +12,15 @@ public sealed record CreateWorkflowTriggerRequest
 
     public required Guid WorkflowDefinitionId { get; init; }
 
+    [Required]
     public required string DefinitionVersion { get; init; }
 
+    [Required]
     public required string Type { get; init; }
 
     public bool Enabled { get; init; } = true;
 
+    [Required]
     public required IReadOnlyDictionary<string, JsonElement> Configuration { get; init; }
 }
 

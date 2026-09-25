@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
 namespace FlowForge.Api.Contracts;
@@ -7,6 +8,7 @@ namespace FlowForge.Api.Contracts;
 /// </summary>
 public sealed record DispatchWorkflowEventRequest
 {
+    [Required]
     public required string EventType { get; init; }
 
     public required JsonElement Payload { get; init; }

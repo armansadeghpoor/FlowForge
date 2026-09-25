@@ -10,7 +10,7 @@ namespace FlowForge.Api.Controllers;
 /// Exposes read-only workflow execution visibility operations.
 /// </summary>
 [ApiController]
-[Route("api/executions")]
+[Route("api/v1/executions")]
 public sealed class ExecutionsController : ControllerBase
 {
     private readonly IWorkflowExecutionQueryService _service;
@@ -37,7 +37,7 @@ public sealed class ExecutionsController : ControllerBase
             cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return Ok(result.Value!.Select(summary => summary.ToDto()).ToArray());
@@ -56,7 +56,7 @@ public sealed class ExecutionsController : ControllerBase
             cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return Ok(result.Value!.ToDto());
@@ -75,7 +75,7 @@ public sealed class ExecutionsController : ControllerBase
             cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return Ok(result.Value!.Select(entry => entry.ToDto()).ToArray());

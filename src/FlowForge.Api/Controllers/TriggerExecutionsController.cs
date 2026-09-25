@@ -1,5 +1,6 @@
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Api.Contracts;
+using FlowForge.Api.Correlation;
 using FlowForge.Api.Errors;
 using FlowForge.Application.Common;
 using FlowForge.Application.Executions;
@@ -13,7 +14,7 @@ namespace FlowForge.Api.Controllers;
 /// Exposes manual trigger execution operations.
 /// </summary>
 [ApiController]
-[Route("api/triggers")]
+[Route("api/v1/triggers")]
 public sealed class TriggerExecutionsController : ControllerBase
 {
     private readonly IWorkflowExecutionCommandService _service;
@@ -38,7 +39,9 @@ public sealed class TriggerExecutionsController : ControllerBase
         var executionRequestIdResult = GetExecutionRequestId();
         if (executionRequestIdResult.Error is not null)
         {
-            return ApplicationErrorMapper.ToActionResult([executionRequestIdResult.Error]);
+            return ApplicationErrorMapper.ToActionResult(
+                [executionRequestIdResult.Error],
+                HttpContext);
         }
 
         var context = new WorkflowTriggerExecutionContext
@@ -46,13 +49,14 @@ public sealed class TriggerExecutionsController : ControllerBase
             ExecutionRequestId = executionRequestIdResult.Id,
             TriggerId = new WorkflowTriggerId(id),
             TriggerType = TriggerType.Manual,
-            CorrelationId = new ExecutionCorrelationId(Guid.NewGuid()),
+            CorrelationId = new ExecutionCorrelationId(
+                CorrelationIdMiddleware.GetExecutionCorrelationId(HttpContext)),
             RequestedAt = DateTime.UtcNow
         };
         var result = await _service.ExecuteTriggerAsync(context, cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return StatusCode(

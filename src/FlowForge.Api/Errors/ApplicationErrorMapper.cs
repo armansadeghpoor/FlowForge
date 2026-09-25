@@ -18,18 +18,24 @@ internal static class ApplicationErrorMapper
         "SelfReferencingEdge"
     };
 
-    public static IActionResult ToActionResult(IReadOnlyList<ApplicationError> errors)
+    public static IActionResult ToActionResult(
+        IReadOnlyList<ApplicationError> errors,
+        HttpContext? httpContext)
     {
-        var response = new ApiErrorResponse
-        {
-            Errors = Array.AsReadOnly(errors
-                .Select(error => new ApiErrorDto
-                {
-                    Code = error.Code,
-                    Message = error.Message
-                })
-                .ToArray())
-        };
+        var details = Array.AsReadOnly(errors
+            .Select(error => new ApiErrorDto
+            {
+                Code = error.Code,
+                Message = error.Message
+            })
+            .ToArray());
+        var primaryError = errors.FirstOrDefault() ??
+            new ApplicationError("Unexpected", "An unexpected error occurred.");
+        var response = ApiErrorResponseFactory.Create(
+            httpContext,
+            primaryError.Code,
+            primaryError.Message,
+            details);
 
         if (errors.Any(error => error.Code.EndsWith("NotFound", StringComparison.Ordinal)))
         {

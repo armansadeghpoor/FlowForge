@@ -10,7 +10,7 @@ namespace FlowForge.Api.Controllers;
 /// Exposes workflow trigger management operations.
 /// </summary>
 [ApiController]
-[Route("api/triggers")]
+[Route("api/v1/triggers")]
 public sealed class TriggersController : ControllerBase
 {
     private readonly IWorkflowTriggerService _service;
@@ -33,7 +33,7 @@ public sealed class TriggersController : ControllerBase
         var result = await _service.ListAsync(cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return Ok(result.Value!.Select(trigger => trigger.ToDto()).ToArray());
@@ -50,7 +50,7 @@ public sealed class TriggersController : ControllerBase
         var result = await _service.CreateAsync(request.ToDomain(), cancellationToken);
         if (!result.IsSuccess)
         {
-            return ApplicationErrorMapper.ToActionResult(result.Errors);
+            return ApplicationErrorMapper.ToActionResult(result.Errors, HttpContext);
         }
 
         return StatusCode(
