@@ -8,12 +8,14 @@ using FlowForge.Application.Security;
 using FlowForge.Application.Triggers;
 using FlowForge.Api.Configuration;
 using FlowForge.Api.Hosting;
+using FlowForge.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFlowForgeApi();
 builder.Services.AddFlowForgeConfiguration(builder.Configuration);
 builder.Services.AddFlowForgeHosting(builder.Environment);
+builder.Services.AddFlowForgeObservability();
 builder.Services.AddScoped<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();
 builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
 builder.Services.AddScoped<IWorkflowEventService, WorkflowEventService>();
@@ -29,6 +31,7 @@ builder.Services.AddScoped<
 var app = builder.Build();
 
 app.UseMiddleware<FlowForge.Api.Correlation.CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
 app.UseMiddleware<FlowForge.Api.Security.SecurityContextMiddleware>();
 app.UseStatusCodePages(FlowForge.Api.Errors.ApiStatusCodeResponseWriter.WriteAsync);

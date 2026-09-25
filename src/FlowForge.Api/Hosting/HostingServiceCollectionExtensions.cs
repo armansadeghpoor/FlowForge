@@ -1,5 +1,6 @@
 using System.Reflection;
 using FlowForge.Abstractions.Hosting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FlowForge.Api.Hosting;
 
@@ -31,6 +32,8 @@ public static class HostingServiceCollectionExtensions
             applicationName,
             version,
             environment.EnvironmentName));
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ApplicationUptime>();
         services.AddHostedService<HostStartupValidationService>();
         services.AddHostedService<HostLifecycleLoggingService>();
 
