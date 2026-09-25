@@ -15,6 +15,7 @@ public sealed class ConfigurationTests
         var runtime = new RuntimeOptions();
         var database = new DatabaseOptions();
         var execution = new ExecutionOptions();
+        var security = new SecurityOptions();
 
         Assert.Equal("flowforge-runtime", runtime.OwnerId);
         Assert.Equal(TimeSpan.FromSeconds(30), runtime.HeartbeatInterval);
@@ -22,6 +23,35 @@ public sealed class ConfigurationTests
         Assert.Equal(string.Empty, database.ConnectionString);
         Assert.Equal(TimeSpan.FromSeconds(30), execution.DefaultNodeTimeout);
         Assert.Equal(1, execution.MaxNodeAttempts);
+        Assert.Equal(string.Empty, security.Authority);
+        Assert.Equal(string.Empty, security.Audience);
+        Assert.False(security.RequireAuthentication);
+    }
+
+    [Fact]
+    public async Task RequiredAuthenticationWithoutAuthorityIsRejectedDuringStartup()
+    {
+        using var host = Host.CreateDefaultBuilder()
+            .ConfigureAppConfiguration(configuration =>
+            {
+                configuration.Sources.Clear();
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    [$"{DatabaseOptions.SectionName}:ConnectionString"] = "Host=localhost",
+                    [$"{SecurityOptions.SectionName}:RequireAuthentication"] = "true",
+                    [$"{SecurityOptions.SectionName}:Audience"] = "flowforge"
+                });
+            })
+            .ConfigureServices((context, services) =>
+                services.AddFlowForgeConfiguration(context.Configuration))
+            .Build();
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(
+            () => host.StartAsync(CancellationToken.None));
+
+        Assert.Contains(
+            $"{SecurityOptions.SectionName}:Authority is required when authentication is required.",
+            exception.Failures);
     }
 
     [Fact]

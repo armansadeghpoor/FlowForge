@@ -14,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFlowForgeApi();
 builder.Services.AddFlowForgeConfiguration(builder.Configuration);
+builder.Services.AddFlowForgeAuthentication(builder.Configuration);
 builder.Services.AddFlowForgeHosting(builder.Environment);
 builder.Services.AddFlowForgeObservability();
 builder.Services.AddScoped<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();
@@ -33,8 +34,11 @@ var app = builder.Build();
 app.UseMiddleware<FlowForge.Api.Correlation.CorrelationIdMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
-app.UseMiddleware<FlowForge.Api.Security.SecurityContextMiddleware>();
 app.UseStatusCodePages(FlowForge.Api.Errors.ApiStatusCodeResponseWriter.WriteAsync);
+app.UseRouting();
+app.UseAuthentication();
+app.UseMiddleware<FlowForge.Api.Security.SecurityContextMiddleware>();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

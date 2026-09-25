@@ -11,7 +11,17 @@ public sealed class SecurityContextMiddleware(RequestDelegate next)
     /// <summary>
     /// Gets the claim type used to carry FlowForge permissions.
     /// </summary>
-    public const string PermissionClaimType = "flowforge.permission";
+    public const string PermissionClaimType = "permissions";
+
+    /// <summary>
+    /// Gets the JWT claim type used for user identifiers.
+    /// </summary>
+    public const string UserIdClaimType = "sub";
+
+    /// <summary>
+    /// Gets the JWT claim type used for tenant identifiers.
+    /// </summary>
+    public const string TenantIdClaimType = "tenant_id";
 
     /// <summary>
     /// Creates the current request's security context without authenticating the request.
@@ -31,12 +41,19 @@ public sealed class SecurityContextMiddleware(RequestDelegate next)
         }
         else
         {
-            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? identity.Name;
+            var userId = principal.FindFirstValue(UserIdClaimType) ??
+                principal.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                identity.Name;
+            var tenantId = principal.FindFirstValue(TenantIdClaimType);
             var permissions = principal.FindAll(PermissionClaimType)
                 .Select(claim => claim.Value)
                 .Where(value => !string.IsNullOrWhiteSpace(value));
 
-            userContext.SetCurrent(new SecurityContext(userId, true, permissions));
+            userContext.SetCurrent(new SecurityContext(
+                userId,
+                true,
+                permissions,
+                tenantId));
         }
 
         await next(httpContext);

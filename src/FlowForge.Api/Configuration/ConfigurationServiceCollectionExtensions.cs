@@ -50,6 +50,24 @@ public static class ConfigurationServiceCollectionExtensions
                 $"{ExecutionOptions.SectionName}:MaxNodeAttempts must be greater than zero.")
             .ValidateOnStart();
 
+        services.AddOptions<SecurityOptions>()
+            .Bind(configuration.GetSection(SecurityOptions.SectionName))
+            .Validate(
+                options => !options.RequireAuthentication ||
+                    !string.IsNullOrWhiteSpace(options.Authority),
+                $"{SecurityOptions.SectionName}:Authority is required when authentication is required.")
+            .Validate(
+                options => !options.RequireAuthentication ||
+                    !string.IsNullOrWhiteSpace(options.Audience),
+                $"{SecurityOptions.SectionName}:Audience is required when authentication is required.")
+            .Validate(
+                options => string.IsNullOrWhiteSpace(options.Authority) ||
+                    Uri.TryCreate(options.Authority, UriKind.Absolute, out var authority) &&
+                    (authority.Scheme == Uri.UriSchemeHttps ||
+                     authority.Scheme == Uri.UriSchemeHttp),
+                $"{SecurityOptions.SectionName}:Authority must be an absolute HTTP or HTTPS URI.")
+            .ValidateOnStart();
+
         return services;
     }
 }

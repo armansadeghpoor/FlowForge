@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Api.Contracts;
 using FlowForge.Api.Correlation;
@@ -6,6 +7,7 @@ using FlowForge.Application.Common;
 using FlowForge.Application.Executions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowForge.Api.Controllers;
@@ -32,6 +34,7 @@ public sealed class TriggerExecutionsController : ControllerBase
     /// Executes a manual workflow trigger.
     /// </summary>
     [HttpPost("{id:guid}/execute")]
+    [Authorize(Policy = Permissions.WorkflowTriggersExecute)]
     public async Task<IActionResult> ExecuteAsync(
         Guid id,
         CancellationToken cancellationToken)

@@ -12,6 +12,7 @@ public sealed class PermissionAuthorizationServiceTests
 
         Assert.False(context.IsAuthenticated);
         Assert.Null(context.UserId);
+        Assert.Null(context.TenantId);
         Assert.Empty(context.Permissions);
     }
 

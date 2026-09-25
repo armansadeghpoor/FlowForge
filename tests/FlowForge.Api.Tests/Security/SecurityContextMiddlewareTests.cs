@@ -25,21 +25,23 @@ public sealed class SecurityContextMiddlewareTests
         Assert.True(nextCalled);
         Assert.False(userContext.Current.IsAuthenticated);
         Assert.Null(userContext.Current.UserId);
+        Assert.Null(userContext.Current.TenantId);
         Assert.Empty(userContext.Current.Permissions);
     }
 
     [Fact]
-    public async Task InvokeAsync_PropagatesExistingPrincipalWithoutAuthenticating()
+    public async Task InvokeAsync_PropagatesJwtClaimsWithoutAuthenticating()
     {
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(
             [
-                new Claim(ClaimTypes.NameIdentifier, "user-42"),
+                new Claim(SecurityContextMiddleware.UserIdClaimType, "user-42"),
+                new Claim(SecurityContextMiddleware.TenantIdClaimType, "tenant-7"),
                 new Claim(
                     SecurityContextMiddleware.PermissionClaimType,
                     Permissions.WorkflowTriggersExecute)
             ],
-            authenticationType: "upstream-test"));
+            authenticationType: "Bearer"));
         var httpContext = new DefaultHttpContext
         {
             User = principal
@@ -51,6 +53,7 @@ public sealed class SecurityContextMiddlewareTests
 
         Assert.True(userContext.Current.IsAuthenticated);
         Assert.Equal("user-42", userContext.Current.UserId);
+        Assert.Equal("tenant-7", userContext.Current.TenantId);
         Assert.Contains(
             Permissions.WorkflowTriggersExecute,
             userContext.Current.Permissions);

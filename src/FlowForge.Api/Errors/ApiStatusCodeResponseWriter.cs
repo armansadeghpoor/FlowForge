@@ -10,6 +10,10 @@ internal static class ApiStatusCodeResponseWriter
         {
             StatusCodes.Status400BadRequest =>
                 ("BadRequest", "The request could not be processed."),
+            StatusCodes.Status401Unauthorized =>
+                ("AuthenticationRequired", "Authentication is required."),
+            StatusCodes.Status403Forbidden =>
+                ("PermissionDenied", "The current user does not have permission."),
             StatusCodes.Status404NotFound =>
                 ("ResourceNotFound", "The requested resource was not found."),
             StatusCodes.Status405MethodNotAllowed =>

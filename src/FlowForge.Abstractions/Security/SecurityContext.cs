@@ -13,14 +13,17 @@ public sealed record SecurityContext
     /// <param name="userId">The provider-independent user identifier, when available.</param>
     /// <param name="isAuthenticated">Whether an upstream component authenticated the user.</param>
     /// <param name="permissions">The permissions associated with the user.</param>
+    /// <param name="tenantId">The provider-independent tenant identifier, when available.</param>
     public SecurityContext(
         string? userId,
         bool isAuthenticated,
-        IEnumerable<string> permissions)
+        IEnumerable<string> permissions,
+        string? tenantId = null)
     {
         ArgumentNullException.ThrowIfNull(permissions);
 
         UserId = userId;
+        TenantId = tenantId;
         IsAuthenticated = isAuthenticated;
         Permissions = permissions.ToFrozenSet(StringComparer.Ordinal);
     }
@@ -34,6 +37,11 @@ public sealed record SecurityContext
     /// Gets the provider-independent user identifier, when available.
     /// </summary>
     public string? UserId { get; }
+
+    /// <summary>
+    /// Gets the provider-independent tenant identifier, when available.
+    /// </summary>
+    public string? TenantId { get; }
 
     /// <summary>
     /// Gets whether an upstream component authenticated the user.

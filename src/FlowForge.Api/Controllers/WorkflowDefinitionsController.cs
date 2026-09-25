@@ -1,9 +1,11 @@
+using FlowForge.Abstractions.Security;
 using FlowForge.Api.Contracts;
 using FlowForge.Api.Errors;
 using FlowForge.Api.Mapping;
 using FlowForge.Application.Common;
 using FlowForge.Application.Definitions;
 using FlowForge.Core.Domain.Identifiers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowForge.Api.Controllers;
@@ -30,6 +32,7 @@ public sealed class WorkflowDefinitionsController : ControllerBase
     /// Lists workflow definition versions.
     /// </summary>
     [HttpGet]
+    [Authorize(Policy = Permissions.WorkflowDefinitionsRead)]
     public async Task<IActionResult> ListAsync(CancellationToken cancellationToken)
     {
         var result = await _service.ListAsync(cancellationToken);
@@ -45,6 +48,7 @@ public sealed class WorkflowDefinitionsController : ControllerBase
     /// Gets an exact workflow definition version.
     /// </summary>
     [HttpGet("{id:guid}/{version}")]
+    [Authorize(Policy = Permissions.WorkflowDefinitionsRead)]
     public async Task<IActionResult> GetAsync(
         Guid id,
         string version,
@@ -77,6 +81,7 @@ public sealed class WorkflowDefinitionsController : ControllerBase
     /// Creates a workflow definition version.
     /// </summary>
     [HttpPost]
+    [Authorize(Policy = Permissions.WorkflowDefinitionsWrite)]
     public async Task<IActionResult> CreateAsync(
         [FromBody] CreateWorkflowDefinitionRequest request,
         CancellationToken cancellationToken)
