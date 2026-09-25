@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\FlowForge.Application\FlowForge.Application.csproj" />
+    <ProjectReference Include="..\FlowForge.Abstractions\FlowForge.Abstractions.csproj" />
+    <ProjectReference Include="..\FlowForge.Core\FlowForge.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
