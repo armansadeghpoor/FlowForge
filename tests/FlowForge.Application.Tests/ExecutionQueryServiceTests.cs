@@ -128,6 +128,10 @@ public sealed class ExecutionQueryServiceTests
             CancellationToken cancellationToken) =>
             Task.FromResult(Summary);
 
+        public Task<IReadOnlyList<ExecutionSummary>> ListSummariesAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ExecutionSummary>>([]);
+
         public Task<IReadOnlyList<ExecutionSummary>> FindExecutionsByCorrelationIdAsync(
             ExecutionCorrelationId correlationId,
             CancellationToken cancellationToken) =>

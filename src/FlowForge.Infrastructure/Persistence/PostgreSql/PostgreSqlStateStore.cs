@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Dapper;
+using FlowForge.Abstractions.Queries;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
@@ -15,7 +16,7 @@ namespace FlowForge.Infrastructure.Persistence.PostgreSql;
 /// <summary>
 /// Stores workflow and node execution snapshots in PostgreSQL.
 /// </summary>
-public sealed class PostgreSqlStateStore : IStateStore
+public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
 {
     private const string InsertWorkflowSql =
         """
@@ -546,6 +547,66 @@ public sealed class PostgreSqlStateStore : IStateStore
             new { WorkflowExecutionId = id.Value },
             cancellationToken: cancellationToken));
         return MapWorkflowExecution(workflow, nodeRows.Select(MapNodeExecution));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WorkflowExecution>> ListExecutionsAsync(
+        CancellationToken cancellationToken)
+    {
+        const string workflowsSql =
+            """
+            SELECT id AS Id,
+                   workflow_id AS WorkflowId,
+                   correlation_id AS CorrelationId,
+                   definition_version AS DefinitionVersion,
+                   status AS Status,
+                   started_at AS StartedAt,
+                   completed_at AS CompletedAt,
+                   created_at AS CreatedAt,
+                   owner_id AS OwnerId,
+                   last_heartbeat_at AS LastHeartbeatAt
+            FROM workflow_executions
+            ORDER BY started_at NULLS LAST, id;
+            """;
+        const string nodesSql =
+            """
+            SELECT id AS Id,
+                   workflow_execution_id AS WorkflowExecutionId,
+                   node_id AS NodeId,
+                   correlation_id AS CorrelationId,
+                   status AS Status,
+                   attempt_number AS AttemptNumber,
+                   output::text AS Output,
+                   failure::text AS Failure,
+                   started_at AS StartedAt,
+                   completed_at AS CompletedAt
+            FROM node_executions
+            WHERE workflow_execution_id = ANY(@WorkflowExecutionIds)
+            ORDER BY workflow_execution_id, started_at NULLS FIRST, id;
+            """;
+
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        var workflowRows = (await connection.QueryAsync<WorkflowExecutionRow>(
+            new CommandDefinition(
+                workflowsSql,
+                cancellationToken: cancellationToken))).ToArray();
+        if (workflowRows.Length == 0)
+        {
+            return Array.Empty<WorkflowExecution>();
+        }
+
+        var nodeRows = await connection.QueryAsync<NodeExecutionRow>(new CommandDefinition(
+            nodesSql,
+            new { WorkflowExecutionIds = workflowRows.Select(row => row.Id).ToArray() },
+            cancellationToken: cancellationToken));
+        var nodesByExecution = nodeRows.ToLookup(row => row.WorkflowExecutionId);
+        var executions = workflowRows
+            .Select(workflow => MapWorkflowExecution(
+                workflow,
+                nodesByExecution[workflow.Id].Select(MapNodeExecution)))
+            .ToArray();
+        return Array.AsReadOnly(executions);
     }
 
     private static WorkflowExecution MapWorkflowExecution(

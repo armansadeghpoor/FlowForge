@@ -90,7 +90,7 @@ public sealed class ExecutionQueryServiceTests
     {
         var execution = CreateExecution();
         var stateStore = new InMemoryStateStore();
-        var service = new ExecutionQueryService(stateStore);
+        var service = new ExecutionQueryService(stateStore, stateStore);
         var completed = CreateHistory(
             execution,
             ExecutionHistoryEventType.WorkflowCompleted,
@@ -127,6 +127,35 @@ public sealed class ExecutionQueryServiceTests
     }
 
     [Fact]
+    public async Task ListSummariesAsync_ReturnsAllStoredExecutions()
+    {
+        var first = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Succeeded,
+            CompletedAt = Timestamp.AddMinutes(1)
+        };
+        var second = CreateExecution() with
+        {
+            Status = WorkflowExecutionStatus.Running,
+            StartedAt = Timestamp.AddMinutes(2)
+        };
+        var stateStore = new InMemoryStateStore();
+        await stateStore.CreateExecutionAsync(first, CancellationToken.None);
+        await stateStore.CreateExecutionAsync(second, CancellationToken.None);
+        var service = new ExecutionQueryService(stateStore, stateStore);
+
+        var summaries = await service.ListSummariesAsync(CancellationToken.None);
+
+        Assert.Equal(2, summaries.Count);
+        Assert.Contains(summaries, summary =>
+            summary.WorkflowExecutionId == first.Id &&
+            summary.Status == WorkflowExecutionStatus.Succeeded);
+        Assert.Contains(summaries, summary =>
+            summary.WorkflowExecutionId == second.Id &&
+            summary.Status == WorkflowExecutionStatus.Running);
+    }
+
+    [Fact]
     public async Task FindExecutionsByCorrelationIdAsync_ExistingCorrelation_ReturnsMatchingSummary()
     {
         var execution = CreateExecution();
@@ -159,7 +188,7 @@ public sealed class ExecutionQueryServiceTests
     {
         var stateStore = new InMemoryStateStore();
         await stateStore.CreateExecutionAsync(execution, CancellationToken.None);
-        return new ExecutionQueryService(stateStore);
+        return new ExecutionQueryService(stateStore, stateStore);
     }
 
     private static WorkflowExecution CreateExecution(

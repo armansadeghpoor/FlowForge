@@ -12,15 +12,21 @@ namespace FlowForge.Engine.Queries;
 public sealed class ExecutionQueryService : IExecutionQueryService
 {
     private readonly IStateStore _stateStore;
+    private readonly IExecutionSnapshotQuery _snapshotQuery;
 
     /// <summary>
     /// Initializes a new execution query service.
     /// </summary>
-    /// <param name="stateStore">The state store used to read execution data.</param>
-    public ExecutionQueryService(IStateStore stateStore)
+    /// <param name="stateStore">The state store used to read targeted execution data.</param>
+    /// <param name="snapshotQuery">The query used to list execution snapshots.</param>
+    public ExecutionQueryService(
+        IStateStore stateStore,
+        IExecutionSnapshotQuery snapshotQuery)
     {
         ArgumentNullException.ThrowIfNull(stateStore);
+        ArgumentNullException.ThrowIfNull(snapshotQuery);
         _stateStore = stateStore;
+        _snapshotQuery = snapshotQuery;
     }
 
     /// <inheritdoc />
@@ -37,6 +43,14 @@ public sealed class ExecutionQueryService : IExecutionQueryService
         }
 
         return CreateSummary(execution);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ExecutionSummary>> ListSummariesAsync(
+        CancellationToken cancellationToken)
+    {
+        var executions = await _snapshotQuery.ListExecutionsAsync(cancellationToken);
+        return Array.AsReadOnly(executions.Select(CreateSummary).ToArray());
     }
 
     /// <inheritdoc />

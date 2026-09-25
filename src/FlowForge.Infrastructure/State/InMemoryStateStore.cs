@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using FlowForge.Abstractions.Queries;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
@@ -10,7 +11,7 @@ namespace FlowForge.Infrastructure.State;
 /// <summary>
 /// Stores workflow and node execution state in memory.
 /// </summary>
-public sealed class InMemoryStateStore : IStateStore
+public sealed class InMemoryStateStore : IStateStore, IExecutionSnapshotQuery
 {
     private readonly ConcurrentDictionary<WorkflowExecutionId, WorkflowExecution> _executions = new();
     private readonly ConcurrentDictionary<
@@ -229,6 +230,21 @@ public sealed class InMemoryStateStore : IStateStore
             : null;
 
         return Task.FromResult(execution);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<WorkflowExecution>> ListExecutionsAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<WorkflowExecution> executions = Array.AsReadOnly(
+            _executions.Values
+                .OrderBy(execution => execution.StartedAt ?? DateTime.MaxValue)
+                .ThenBy(execution => execution.Id.Value)
+                .Select(Snapshot)
+                .ToArray());
+        return Task.FromResult(executions);
     }
 
     /// <inheritdoc />

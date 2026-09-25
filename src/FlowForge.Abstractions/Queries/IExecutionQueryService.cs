@@ -19,6 +19,12 @@ public interface IExecutionQueryService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Lists derived summaries for all workflow execution snapshots.
+    /// </summary>
+    Task<IReadOnlyList<ExecutionSummary>> ListSummariesAsync(
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Finds execution summaries associated with a correlation identifier.
     /// </summary>
     Task<IReadOnlyList<ExecutionSummary>> FindExecutionsByCorrelationIdAsync(

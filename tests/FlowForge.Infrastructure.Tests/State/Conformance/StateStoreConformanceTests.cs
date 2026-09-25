@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FlowForge.Abstractions.Queries;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Executions;
@@ -175,6 +176,26 @@ public abstract class StateStoreConformanceTests
             CancellationToken.None);
 
         Assert.Null(retrieved);
+    }
+
+    [SkippableFact]
+    public async Task ListExecutionsAsync_ReturnsCompleteExecutionSnapshots()
+    {
+        var store = CreateStore();
+        var snapshotQuery = Assert.IsAssignableFrom<IExecutionSnapshotQuery>(store);
+        var first = CreateExecution();
+        var second = CreateExecution();
+        var node = CreateNodeExecution();
+        await store.CreateExecutionAsync(first, CancellationToken.None);
+        await store.CreateExecutionAsync(second, CancellationToken.None);
+        await store.SaveNodeExecutionAsync(first.Id, node, CancellationToken.None);
+
+        var executions = await snapshotQuery.ListExecutionsAsync(CancellationToken.None);
+
+        Assert.Equal(2, executions.Count);
+        var retrievedFirst = Assert.Single(executions, execution => execution.Id == first.Id);
+        Assert.Equal(node, Assert.Single(retrievedFirst.Nodes));
+        Assert.Contains(executions, execution => execution.Id == second.Id);
     }
 
     [SkippableFact]
