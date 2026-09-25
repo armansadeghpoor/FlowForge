@@ -35,6 +35,8 @@ public sealed class ApiControllerTests
         var created = Assert.IsType<CreatedAtActionResult>(result);
         var response = Assert.IsType<WorkflowDefinitionDto>(created.Value);
         Assert.Equal(definition.Id.Value, response.Id);
+        Assert.Equal(definition.OwnerTenantId.Value, response.OwnerTenantId);
+        Assert.Equal(definition.OwnerTenantId, service.SubmittedDefinition!.OwnerTenantId);
         Assert.Equal(definition.Version, response.Version);
         Assert.NotSame(definition, response);
     }
@@ -78,6 +80,7 @@ public sealed class ApiControllerTests
         var ok = Assert.IsType<OkObjectResult>(result);
         var response = Assert.IsType<WorkflowDefinitionDto>(ok.Value);
         Assert.Equal(definition.Name, response.Name);
+        Assert.Equal(definition.OwnerTenantId.Value, response.OwnerTenantId);
         Assert.Single(response.Nodes);
     }
 
@@ -255,6 +258,7 @@ public sealed class ApiControllerTests
         return new WorkflowDefinition
         {
             Id = new WorkflowDefinitionId(Guid.NewGuid()),
+            OwnerTenantId = new TenantId(Guid.NewGuid()),
             Name = "API workflow",
             Version = "1.0",
             Description = "Created through the API boundary.",
@@ -269,6 +273,7 @@ public sealed class ApiControllerTests
         new()
         {
             Id = definition.Id.Value,
+            OwnerTenantId = definition.OwnerTenantId.Value,
             Name = definition.Name,
             Version = definition.Version,
             Description = definition.Description,
@@ -298,6 +303,8 @@ public sealed class ApiControllerTests
 
     private sealed class DefinitionServiceStub : IWorkflowDefinitionService
     {
+        public WorkflowDefinition? SubmittedDefinition { get; private set; }
+
         public ApplicationResult<WorkflowDefinition> CreateResult { get; init; } =
             ApplicationResult<WorkflowDefinition>.Failure(
                 new ApplicationError("Unexpected", "Not configured."));
@@ -308,7 +315,11 @@ public sealed class ApiControllerTests
 
         public Task<ApplicationResult<WorkflowDefinition>> CreateAsync(
             WorkflowDefinition definition,
-            CancellationToken cancellationToken) => Task.FromResult(CreateResult);
+            CancellationToken cancellationToken)
+        {
+            SubmittedDefinition = definition;
+            return Task.FromResult(CreateResult);
+        }
 
         public Task<ApplicationResult<WorkflowDefinition?>> GetAsync(
             WorkflowDefinitionId id,

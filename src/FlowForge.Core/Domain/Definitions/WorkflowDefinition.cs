@@ -9,6 +9,11 @@ public sealed record WorkflowDefinition
 {
     public required WorkflowDefinitionId Id { get; init; }
 
+    /// <summary>
+    /// Gets the tenant that owns this workflow definition.
+    /// </summary>
+    public required TenantId OwnerTenantId { get; init; }
+
     public required string Name { get; init; }
 
     /// <summary>

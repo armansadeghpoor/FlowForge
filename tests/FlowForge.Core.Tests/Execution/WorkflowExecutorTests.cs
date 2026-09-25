@@ -402,6 +402,8 @@ public sealed class WorkflowExecutorTests
         {
             Id = new WorkflowDefinitionId(
                 Guid.Parse("10000000-0000-0000-0000-000000000000")),
+            OwnerTenantId = new TenantId(
+                Guid.Parse("20000000-0000-0000-0000-000000000000")),
             Name = "Test workflow",
             Version = "test-v1",
             Description = null,

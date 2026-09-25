@@ -118,6 +118,7 @@ public sealed class ManualTriggerExecutorTests
         new()
         {
             Id = new WorkflowDefinitionId(Guid.NewGuid()),
+            OwnerTenantId = new TenantId(Guid.NewGuid()),
             Name = "Manual trigger workflow",
             Version = "1.0",
             Description = null,

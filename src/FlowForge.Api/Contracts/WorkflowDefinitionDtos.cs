@@ -10,6 +10,8 @@ public sealed record CreateWorkflowDefinitionRequest
 {
     public required Guid Id { get; init; }
 
+    public required Guid OwnerTenantId { get; init; }
+
     [Required]
     public required string Name { get; init; }
 
@@ -33,6 +35,8 @@ public sealed record CreateWorkflowDefinitionRequest
 public sealed record WorkflowDefinitionDto
 {
     public required Guid Id { get; init; }
+
+    public required Guid OwnerTenantId { get; init; }
 
     public required string Name { get; init; }
 

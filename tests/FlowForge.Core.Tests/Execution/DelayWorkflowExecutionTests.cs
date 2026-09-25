@@ -24,6 +24,7 @@ public sealed class DelayWorkflowExecutionTests
         var workflow = new WorkflowDefinition
         {
             Id = new WorkflowDefinitionId(Guid.NewGuid()),
+            OwnerTenantId = new TenantId(Guid.NewGuid()),
             Name = "Zero-duration delay",
             Version = "delay-v1",
             Description = null,

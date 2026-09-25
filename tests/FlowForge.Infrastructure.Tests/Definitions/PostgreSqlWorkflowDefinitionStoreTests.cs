@@ -78,6 +78,7 @@ public sealed class PostgreSqlWorkflowDefinitionStoreTests : IAsyncLifetime
 
         Assert.NotNull(retrieved);
         Assert.Equal(definition.Id, retrieved.Id);
+        Assert.Equal(definition.OwnerTenantId, retrieved.OwnerTenantId);
         Assert.Equal(definition.Name, retrieved.Name);
         Assert.Equal(definition.Version, retrieved.Version);
         Assert.Equal(definition.Description, retrieved.Description);
@@ -213,6 +214,7 @@ public sealed class PostgreSqlWorkflowDefinitionStoreTests : IAsyncLifetime
         new()
         {
             Id = id ?? new WorkflowDefinitionId(Guid.NewGuid()),
+            OwnerTenantId = new TenantId(Guid.NewGuid()),
             Name = "PostgreSQL workflow",
             Version = version,
             Description = "PostgreSQL definition test fixture.",

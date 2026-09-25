@@ -16,6 +16,7 @@ internal static class ApiMappings
         new()
         {
             Id = new WorkflowDefinitionId(request.Id),
+            OwnerTenantId = new TenantId(request.OwnerTenantId),
             Name = request.Name,
             Version = request.Version,
             Description = request.Description,
@@ -41,6 +42,7 @@ internal static class ApiMappings
         new()
         {
             Id = definition.Id.Value,
+            OwnerTenantId = definition.OwnerTenantId.Value,
             Name = definition.Name,
             Version = definition.Version,
             Description = definition.Description,

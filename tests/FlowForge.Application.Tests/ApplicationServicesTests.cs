@@ -27,6 +27,8 @@ public sealed class ApplicationServicesTests
         Assert.True(result.IsSuccess);
         Assert.Same(definition, result.Value);
         Assert.Same(definition, store.SavedDefinition);
+        Assert.Equal(definition.OwnerTenantId, result.Value!.OwnerTenantId);
+        Assert.Equal(definition.OwnerTenantId, store.SavedDefinition!.OwnerTenantId);
         Assert.Empty(result.Errors);
     }
 
@@ -156,6 +158,7 @@ public sealed class ApplicationServicesTests
         new()
         {
             Id = new WorkflowDefinitionId(Guid.NewGuid()),
+            OwnerTenantId = new TenantId(Guid.NewGuid()),
             Name = "Application workflow",
             Version = "v1",
             Description = null,

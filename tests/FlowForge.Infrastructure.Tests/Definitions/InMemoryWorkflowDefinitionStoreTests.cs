@@ -21,6 +21,7 @@ public sealed class InMemoryWorkflowDefinitionStoreTests
 
         Assert.NotNull(retrieved);
         Assert.Equal(definition.Id, retrieved.Id);
+        Assert.Equal(definition.OwnerTenantId, retrieved.OwnerTenantId);
         Assert.Equal(definition.Name, retrieved.Name);
         Assert.Equal(definition.Version, retrieved.Version);
         Assert.Equal(definition.Description, retrieved.Description);
@@ -118,6 +119,7 @@ public sealed class InMemoryWorkflowDefinitionStoreTests
         new()
         {
             Id = id ?? new WorkflowDefinitionId(Guid.NewGuid()),
+            OwnerTenantId = new TenantId(Guid.NewGuid()),
             Name = "Managed workflow",
             Version = version,
             Description = "Managed definition test fixture.",

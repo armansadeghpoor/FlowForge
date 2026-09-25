@@ -133,6 +133,7 @@ public sealed class PostgreSqlWorkflowDefinitionStore : IWorkflowDefinitionStore
         JsonSerializer.Serialize(
             new WorkflowGraphDocument
             {
+                OwnerTenantId = definition.OwnerTenantId.Value,
                 Nodes = definition.Nodes.Select(MapNode).ToArray(),
                 Edges = definition.Edges.Select(MapEdge).ToArray()
             },
@@ -149,6 +150,7 @@ public sealed class PostgreSqlWorkflowDefinitionStore : IWorkflowDefinitionStore
         return new WorkflowDefinition
         {
             Id = new WorkflowDefinitionId(row.Id),
+            OwnerTenantId = new TenantId(graph.OwnerTenantId),
             Name = row.Name,
             Version = row.Version,
             Description = row.Description,
@@ -218,6 +220,8 @@ public sealed class PostgreSqlWorkflowDefinitionStore : IWorkflowDefinitionStore
 
     private sealed record WorkflowGraphDocument
     {
+        public Guid OwnerTenantId { get; init; }
+
         public required IReadOnlyList<NodeDocument> Nodes { get; init; }
 
         public required IReadOnlyList<EdgeDocument> Edges { get; init; }
