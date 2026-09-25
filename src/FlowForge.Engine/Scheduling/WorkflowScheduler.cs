@@ -4,6 +4,7 @@ using FlowForge.Abstractions.Triggers;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Domain.Schedules;
+using FlowForge.Engine.Execution;
 
 namespace FlowForge.Engine.Scheduling;
 
@@ -105,6 +106,10 @@ public sealed class WorkflowScheduler : IWorkflowScheduler
             var workflowExecutionId = await _triggerExecutor.ExecuteAsync(
                 new WorkflowTriggerExecutionContext
                 {
+                    ExecutionRequestId = ExecutionRequestIdFactory.Create(
+                        schedule.Id.Value,
+                        occurrenceUtc.Ticks.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture)),
                     TriggerId = schedule.WorkflowTriggerId,
                     TriggerType = TriggerType.Timer,
                     CorrelationId = $"schedule:{schedule.Id.Value:N}:{occurrenceUtc.Ticks}",

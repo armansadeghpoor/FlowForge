@@ -3,6 +3,7 @@ using FlowForge.Abstractions.Triggers;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Domain.Triggers;
+using FlowForge.Engine.Execution;
 
 namespace FlowForge.Engine.Events;
 
@@ -65,6 +66,9 @@ public sealed class WorkflowEventRuntime : IWorkflowEventRuntime
             var workflowExecutionId = await _triggerExecutor.ExecuteAsync(
                 new WorkflowTriggerExecutionContext
                 {
+                    ExecutionRequestId = ExecutionRequestIdFactory.Create(
+                        eventTrigger.Id.Value,
+                        eventContext.CorrelationId),
                     TriggerId = eventTrigger.WorkflowTriggerId,
                     TriggerType = TriggerType.Event,
                     CorrelationId = eventContext.CorrelationId,

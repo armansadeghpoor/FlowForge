@@ -43,9 +43,29 @@ public sealed class WorkflowExecutionCommandServiceTests
         Assert.DoesNotContain("provider detail", error.Message);
     }
 
+    [Fact]
+    public async Task ExecuteTriggerAsync_DuplicateRequest_ReturnsConflictError()
+    {
+        var service = new WorkflowExecutionCommandService(
+            new TriggerExecutorStub
+            {
+                Exception = new InvalidOperationException("duplicate detail")
+            });
+
+        var result = await service.ExecuteTriggerAsync(
+            CreateContext(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        var error = Assert.Single(result.Errors);
+        Assert.Equal("TriggerExecutionConflict", error.Code);
+        Assert.DoesNotContain("duplicate detail", error.Message);
+    }
+
     private static WorkflowTriggerExecutionContext CreateContext() =>
         new()
         {
+            ExecutionRequestId = new ExecutionRequestId(Guid.NewGuid()),
             TriggerId = new WorkflowTriggerId(Guid.NewGuid()),
             TriggerType = TriggerType.Manual,
             CorrelationId = Guid.NewGuid().ToString("N"),

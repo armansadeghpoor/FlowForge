@@ -25,6 +25,7 @@ public sealed class WorkflowEventRuntimeTests
         Assert.Equal(eventTrigger.WorkflowTriggerId, executor.Contexts.Single().TriggerId);
         Assert.Equal(TriggerType.Event, executor.Contexts.Single().TriggerType);
         Assert.Equal(context.CorrelationId, executor.Contexts.Single().CorrelationId);
+        Assert.NotEqual(default, executor.Contexts.Single().ExecutionRequestId);
     }
 
     [Fact]

@@ -30,6 +30,7 @@ public sealed class WorkflowSchedulerTests
         Assert.Equal(executor.ExecutionId, result.WorkflowExecutionId);
         Assert.Equal(schedule.WorkflowTriggerId, executor.Context!.TriggerId);
         Assert.Equal(TriggerType.Timer, executor.Context.TriggerType);
+        Assert.NotEqual(default, executor.Context.ExecutionRequestId);
     }
 
     [Fact]

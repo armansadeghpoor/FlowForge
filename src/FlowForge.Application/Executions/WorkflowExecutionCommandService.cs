@@ -70,6 +70,13 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
 
     private static ApplicationError? Validate(WorkflowTriggerExecutionContext context)
     {
+        if (context.ExecutionRequestId.Value == Guid.Empty)
+        {
+            return new ApplicationError(
+                "ExecutionRequestIdRequired",
+                "An execution request identifier is required.");
+        }
+
         if (context.TriggerId.Value == Guid.Empty)
         {
             return new ApplicationError(

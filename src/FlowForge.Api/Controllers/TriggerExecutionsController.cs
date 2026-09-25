@@ -1,6 +1,7 @@
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Api.Contracts;
 using FlowForge.Api.Errors;
+using FlowForge.Application.Common;
 using FlowForge.Application.Executions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
@@ -34,8 +35,15 @@ public sealed class TriggerExecutionsController : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
+        var executionRequestIdResult = GetExecutionRequestId();
+        if (executionRequestIdResult.Error is not null)
+        {
+            return ApplicationErrorMapper.ToActionResult([executionRequestIdResult.Error]);
+        }
+
         var context = new WorkflowTriggerExecutionContext
         {
+            ExecutionRequestId = executionRequestIdResult.Id,
             TriggerId = new WorkflowTriggerId(id),
             TriggerType = TriggerType.Manual,
             CorrelationId = Guid.NewGuid().ToString("N"),
@@ -51,10 +59,35 @@ public sealed class TriggerExecutionsController : ControllerBase
             StatusCodes.Status201Created,
             new TriggerExecutionDto
             {
+                ExecutionRequestId = context.ExecutionRequestId.Value,
                 WorkflowExecutionId = result.Value.Value,
                 TriggerId = context.TriggerId.Value,
                 CorrelationId = context.CorrelationId,
                 RequestedAt = context.RequestedAt
             });
+    }
+
+    private (ExecutionRequestId Id, ApplicationError? Error)
+        GetExecutionRequestId()
+    {
+        const string headerName = "X-Execution-Request-Id";
+        var headerValue = ControllerContext.HttpContext?.Request.Headers[headerName]
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(headerValue))
+        {
+            return (new ExecutionRequestId(Guid.NewGuid()), null);
+        }
+
+        if (!Guid.TryParse(headerValue, out var parsed))
+        {
+            return (
+                default,
+                new ApplicationError(
+                    "ExecutionRequestIdInvalid",
+                    $"The {headerName} header must contain a valid UUID."));
+        }
+
+        return (new ExecutionRequestId(parsed), null);
     }
 }

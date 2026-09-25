@@ -9,6 +9,11 @@ namespace FlowForge.Abstractions.Triggers;
 public sealed record WorkflowTriggerExecutionContext
 {
     /// <summary>
+    /// Gets the execution request identifier.
+    /// </summary>
+    public required ExecutionRequestId ExecutionRequestId { get; init; }
+
+    /// <summary>
     /// Gets the trigger identifier.
     /// </summary>
     public required WorkflowTriggerId TriggerId { get; init; }

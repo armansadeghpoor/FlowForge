@@ -43,6 +43,8 @@ public sealed record WorkflowTriggerDto
 /// </summary>
 public sealed record TriggerExecutionDto
 {
+    public required Guid ExecutionRequestId { get; init; }
+
     public required Guid WorkflowExecutionId { get; init; }
 
     public required Guid TriggerId { get; init; }

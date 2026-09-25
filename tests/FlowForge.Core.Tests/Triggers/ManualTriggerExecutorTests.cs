@@ -93,6 +93,7 @@ public sealed class ManualTriggerExecutorTests
     private static WorkflowTriggerExecutionContext CreateContext(WorkflowTriggerId triggerId) =>
         new()
         {
+            ExecutionRequestId = new ExecutionRequestId(Guid.NewGuid()),
             TriggerId = triggerId,
             TriggerType = TriggerType.Manual,
             CorrelationId = Guid.NewGuid().ToString("N"),
