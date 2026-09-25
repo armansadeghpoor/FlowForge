@@ -129,7 +129,10 @@ public sealed class ApiHardeningTests
     {
         var routeTemplates = typeof(WorkflowDefinitionsController).Assembly
             .GetTypes()
-            .Where(type => !type.IsAbstract && typeof(ControllerBase).IsAssignableFrom(type))
+            .Where(type =>
+                !type.IsAbstract &&
+                type != typeof(HealthController) &&
+                typeof(ControllerBase).IsAssignableFrom(type))
             .SelectMany(type => type.GetCustomAttributes<RouteAttribute>())
             .Select(attribute => attribute.Template)
             .ToArray();

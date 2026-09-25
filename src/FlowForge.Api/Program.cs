@@ -7,11 +7,13 @@ using FlowForge.Application.Schedules;
 using FlowForge.Application.Security;
 using FlowForge.Application.Triggers;
 using FlowForge.Api.Configuration;
+using FlowForge.Api.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddFlowForgeApi();
 builder.Services.AddFlowForgeConfiguration(builder.Configuration);
+builder.Services.AddFlowForgeHosting(builder.Environment);
 builder.Services.AddScoped<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();
 builder.Services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
 builder.Services.AddScoped<IWorkflowEventService, WorkflowEventService>();
