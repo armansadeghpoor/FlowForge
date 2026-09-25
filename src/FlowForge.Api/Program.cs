@@ -4,6 +4,7 @@ using FlowForge.Application.Events;
 using FlowForge.Application.Executions;
 using FlowForge.Application.Queries;
 using FlowForge.Application.Schedules;
+using FlowForge.Application.Security;
 using FlowForge.Application.Triggers;
 using FlowForge.Api.Configuration;
 
@@ -19,11 +20,15 @@ builder.Services.AddScoped<IWorkflowTriggerService, WorkflowTriggerService>();
 builder.Services.AddScoped<IWorkflowScheduleService, WorkflowScheduleService>();
 builder.Services.AddScoped<IWorkflowEventTriggerService, WorkflowEventTriggerService>();
 builder.Services.AddScoped<IWorkflowExecutionQueryService, WorkflowExecutionQueryService>();
+builder.Services.AddScoped<
+    FlowForge.Abstractions.Security.IAuthorizationService,
+    PermissionAuthorizationService>();
 
 var app = builder.Build();
 
 app.UseMiddleware<FlowForge.Api.Correlation.CorrelationIdMiddleware>();
 app.UseExceptionHandler();
+app.UseMiddleware<FlowForge.Api.Security.SecurityContextMiddleware>();
 app.UseStatusCodePages(FlowForge.Api.Errors.ApiStatusCodeResponseWriter.WriteAsync);
 app.MapControllers();
 

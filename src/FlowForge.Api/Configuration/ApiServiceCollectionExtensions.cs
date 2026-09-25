@@ -1,4 +1,6 @@
+using FlowForge.Abstractions.Security;
 using FlowForge.Api.Errors;
+using FlowForge.Api.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowForge.Api.Configuration;
@@ -26,6 +28,9 @@ public static class ApiServiceCollectionExtensions
                             "The request is invalid."));
             });
         services.AddExceptionHandler<ApiExceptionHandler>();
+        services.AddScoped<HttpUserContext>();
+        services.AddScoped<IUserContext>(serviceProvider =>
+            serviceProvider.GetRequiredService<HttpUserContext>());
 
         return services;
     }
