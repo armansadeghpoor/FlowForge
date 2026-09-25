@@ -38,6 +38,7 @@ app.UseStatusCodePages(FlowForge.Api.Errors.ApiStatusCodeResponseWriter.WriteAsy
 app.UseRouting();
 app.UseAuthentication();
 app.UseMiddleware<FlowForge.Api.Security.SecurityContextMiddleware>();
+app.UseMiddleware<FlowForge.Api.Tenancy.TenantContextMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 

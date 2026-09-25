@@ -1,6 +1,8 @@
 using FlowForge.Abstractions.Security;
+using FlowForge.Abstractions.Tenancy;
 using FlowForge.Api.Errors;
 using FlowForge.Api.Security;
+using FlowForge.Api.Tenancy;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowForge.Api.Configuration;
@@ -31,6 +33,9 @@ public static class ApiServiceCollectionExtensions
         services.AddScoped<HttpUserContext>();
         services.AddScoped<IUserContext>(serviceProvider =>
             serviceProvider.GetRequiredService<HttpUserContext>());
+        services.AddScoped<HttpTenantContext>();
+        services.AddScoped<ITenantContext>(serviceProvider =>
+            serviceProvider.GetRequiredService<HttpTenantContext>());
 
         return services;
     }
