@@ -1,4 +1,5 @@
 using FlowForge.Abstractions.Triggers;
+using FlowForge.Application.Tests.Auditing;
 using FlowForge.Application.Executions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
@@ -12,8 +13,14 @@ public sealed class WorkflowExecutionCommandServiceTests
     {
         var expected = new WorkflowExecutionId(Guid.NewGuid());
         var executor = new TriggerExecutorStub { ExecutionId = expected };
-        var service = new WorkflowExecutionCommandService(executor);
         var context = CreateContext();
+        var tenantId = new TenantId(Guid.NewGuid());
+        var auditStore = new RecordingAuditStore();
+        var auditContext = StaticAuditContext.Create(tenantId: tenantId);
+        var service = new WorkflowExecutionCommandService(
+            executor,
+            auditStore,
+            auditContext);
 
         var result = await service.ExecuteTriggerAsync(
             context,
@@ -22,6 +29,19 @@ public sealed class WorkflowExecutionCommandServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(expected, result.Value);
         Assert.Same(context, executor.ReceivedContext);
+        var audit = Assert.Single(auditStore.Entries);
+        Assert.Equal("WorkflowTrigger.Execute", audit.Action);
+        Assert.Equal("WorkflowTrigger", audit.ResourceType);
+        Assert.Equal(context.TriggerId.Value.ToString("D"), audit.ResourceIdentifier);
+        Assert.Equal(AuditOutcome.Succeeded, audit.Outcome);
+        Assert.Equal(context.CorrelationId, audit.CorrelationId);
+        Assert.Equal("user-1", audit.UserId);
+        Assert.Equal(tenantId, audit.TenantId);
+        Assert.Equal(
+            context.ExecutionRequestId.Value,
+            audit.Metadata!.Value
+                .GetProperty("executionRequestId")
+                .GetGuid());
     }
 
     [Fact]
@@ -31,7 +51,11 @@ public sealed class WorkflowExecutionCommandServiceTests
         {
             Exception = new KeyNotFoundException("provider detail")
         };
-        var service = new WorkflowExecutionCommandService(executor);
+        var auditStore = new RecordingAuditStore();
+        var service = new WorkflowExecutionCommandService(
+            executor,
+            auditStore,
+            StaticAuditContext.Create());
 
         var result = await service.ExecuteTriggerAsync(
             CreateContext(),
@@ -41,6 +65,9 @@ public sealed class WorkflowExecutionCommandServiceTests
         var error = Assert.Single(result.Errors);
         Assert.Equal("TriggerExecutionNotFound", error.Code);
         Assert.DoesNotContain("provider detail", error.Message);
+        Assert.Equal(
+            AuditOutcome.Failed,
+            Assert.Single(auditStore.Entries).Outcome);
     }
 
     [Fact]
@@ -50,7 +77,9 @@ public sealed class WorkflowExecutionCommandServiceTests
             new TriggerExecutorStub
             {
                 Exception = new InvalidOperationException("duplicate detail")
-            });
+            },
+            new RecordingAuditStore(),
+            StaticAuditContext.Create());
 
         var result = await service.ExecuteTriggerAsync(
             CreateContext(),

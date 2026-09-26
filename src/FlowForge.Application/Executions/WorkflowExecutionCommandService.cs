@@ -1,4 +1,7 @@
+using System.Text.Json;
+using FlowForge.Abstractions.Auditing;
 using FlowForge.Abstractions.Triggers;
+using FlowForge.Application.Auditing;
 using FlowForge.Application.Common;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
@@ -11,14 +14,21 @@ namespace FlowForge.Application.Executions;
 public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandService
 {
     private readonly IWorkflowTriggerExecutor _triggerExecutor;
+    private readonly ApplicationAuditRecorder _auditRecorder;
 
     /// <summary>
     /// Initializes a workflow execution command service.
     /// </summary>
-    public WorkflowExecutionCommandService(IWorkflowTriggerExecutor triggerExecutor)
+    public WorkflowExecutionCommandService(
+        IWorkflowTriggerExecutor triggerExecutor,
+        IAuditStore auditStore,
+        IAuditContext auditContext)
     {
         ArgumentNullException.ThrowIfNull(triggerExecutor);
+        ArgumentNullException.ThrowIfNull(auditStore);
+        ArgumentNullException.ThrowIfNull(auditContext);
         _triggerExecutor = triggerExecutor;
+        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext);
     }
 
     /// <inheritdoc />
@@ -31,6 +41,10 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
         var validationError = Validate(context);
         if (validationError is not null)
         {
+            await AuditExecutionRequestAsync(
+                context,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowExecutionId>.Failure(validationError);
         }
 
@@ -39,6 +53,11 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
             var executionId = await _triggerExecutor.ExecuteAsync(
                 context,
                 cancellationToken);
+            await AuditExecutionRequestAsync(
+                context,
+                AuditOutcome.Succeeded,
+                cancellationToken,
+                executionId);
             return ApplicationResult<WorkflowExecutionId>.Success(executionId);
         }
         catch (OperationCanceledException)
@@ -47,6 +66,10 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
         }
         catch (KeyNotFoundException)
         {
+            await AuditExecutionRequestAsync(
+                context,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowExecutionId>.Failure(
                 new ApplicationError(
                     "TriggerExecutionNotFound",
@@ -54,6 +77,10 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
         }
         catch (InvalidOperationException)
         {
+            await AuditExecutionRequestAsync(
+                context,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowExecutionId>.Failure(
                 new ApplicationError(
                     "TriggerExecutionConflict",
@@ -61,6 +88,10 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
         }
         catch (Exception)
         {
+            await AuditExecutionRequestAsync(
+                context,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowExecutionId>.Failure(
                 new ApplicationError(
                     "TriggerExecutionFailed",
@@ -99,5 +130,29 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
         }
 
         return null;
+    }
+
+    private Task AuditExecutionRequestAsync(
+        WorkflowTriggerExecutionContext context,
+        AuditOutcome outcome,
+        CancellationToken cancellationToken,
+        WorkflowExecutionId? workflowExecutionId = null)
+    {
+        var metadata = JsonSerializer.SerializeToElement(
+            new
+            {
+                executionRequestId = context.ExecutionRequestId.Value,
+                workflowExecutionId = workflowExecutionId?.Value
+            });
+
+        return _auditRecorder.TryRecordAsync(
+            ApplicationAuditActions.WorkflowTriggerExecute,
+            ApplicationAuditResourceTypes.WorkflowTrigger,
+            context.TriggerId.Value.ToString("D"),
+            outcome,
+            resourceTenantId: null,
+            cancellationToken,
+            context.CorrelationId,
+            metadata);
     }
 }

@@ -1,5 +1,7 @@
+using FlowForge.Abstractions.Auditing;
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Tenancy;
+using FlowForge.Api.Auditing;
 using FlowForge.Api.Errors;
 using FlowForge.Api.Security;
 using FlowForge.Api.Tenancy;
@@ -30,12 +32,14 @@ public static class ApiServiceCollectionExtensions
                             "The request is invalid."));
             });
         services.AddExceptionHandler<ApiExceptionHandler>();
+        services.AddHttpContextAccessor();
         services.AddScoped<HttpUserContext>();
         services.AddScoped<IUserContext>(serviceProvider =>
             serviceProvider.GetRequiredService<HttpUserContext>());
         services.AddScoped<HttpTenantContext>();
         services.AddScoped<ITenantContext>(serviceProvider =>
             serviceProvider.GetRequiredService<HttpTenantContext>());
+        services.AddScoped<IAuditContext, HttpAuditContext>();
 
         return services;
     }

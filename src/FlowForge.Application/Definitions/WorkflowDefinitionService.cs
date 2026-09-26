@@ -1,8 +1,11 @@
+using FlowForge.Abstractions.Auditing;
 using FlowForge.Abstractions.Definitions;
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Validation;
+using FlowForge.Application.Auditing;
 using FlowForge.Application.Common;
 using FlowForge.Core.Domain.Definitions;
+using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
 
 namespace FlowForge.Application.Definitions;
@@ -15,6 +18,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private readonly IWorkflowDefinitionValidator _validator;
     private readonly IWorkflowDefinitionStore _store;
     private readonly IAuthorizationService _authorizationService;
+    private readonly ApplicationAuditRecorder _auditRecorder;
 
     /// <summary>
     /// Initializes a workflow definition application service.
@@ -22,14 +26,19 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     public WorkflowDefinitionService(
         IWorkflowDefinitionValidator validator,
         IWorkflowDefinitionStore store,
-        IAuthorizationService authorizationService)
+        IAuthorizationService authorizationService,
+        IAuditStore auditStore,
+        IAuditContext auditContext)
     {
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(authorizationService);
+        ArgumentNullException.ThrowIfNull(auditStore);
+        ArgumentNullException.ThrowIfNull(auditContext);
         _validator = validator;
         _store = store;
         _authorizationService = authorizationService;
+        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext);
     }
 
     /// <inheritdoc />
@@ -44,12 +53,22 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 definition.OwnerTenantId,
                 cancellationToken))
         {
+            await AuditDefinitionAsync(
+                ApplicationAuditActions.WorkflowDefinitionCreate,
+                definition,
+                AuditOutcome.Denied,
+                cancellationToken);
             return PermissionDenied<WorkflowDefinition>();
         }
 
         var validation = _validator.Validate(definition);
         if (!validation.IsValid)
         {
+            await AuditDefinitionAsync(
+                ApplicationAuditActions.WorkflowDefinitionCreate,
+                definition,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowDefinition>.Failure(
                 validation.Errors.Select(error =>
                     new ApplicationError(error.Code, error.Message)));
@@ -58,6 +77,11 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         try
         {
             await _store.SaveAsync(definition, cancellationToken);
+            await AuditDefinitionAsync(
+                ApplicationAuditActions.WorkflowDefinitionCreate,
+                definition,
+                AuditOutcome.Succeeded,
+                cancellationToken);
             return ApplicationResult<WorkflowDefinition>.Success(definition);
         }
         catch (OperationCanceledException)
@@ -66,6 +90,11 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         }
         catch (InvalidOperationException)
         {
+            await AuditDefinitionAsync(
+                ApplicationAuditActions.WorkflowDefinitionCreate,
+                definition,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowDefinition>.Failure(
                 new ApplicationError(
                     "DefinitionAlreadyExists",
@@ -73,6 +102,11 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         }
         catch (Exception)
         {
+            await AuditDefinitionAsync(
+                ApplicationAuditActions.WorkflowDefinitionCreate,
+                definition,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowDefinition>.Failure(
                 PersistenceError("DefinitionPersistenceFailed"));
         }
@@ -86,6 +120,12 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     {
         if (id.Value == Guid.Empty || string.IsNullOrWhiteSpace(version))
         {
+            await AuditDefinitionReferenceAsync(
+                id,
+                version,
+                resourceTenantId: null,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowDefinition?>.Failure(
                 new ApplicationError(
                     "DefinitionReferenceInvalid",
@@ -97,6 +137,12 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 ownerTenantId: null,
                 cancellationToken))
         {
+            await AuditDefinitionReferenceAsync(
+                id,
+                version,
+                resourceTenantId: null,
+                AuditOutcome.Denied,
+                cancellationToken);
             return PermissionDenied<WorkflowDefinition?>();
         }
 
@@ -109,8 +155,22 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                     definition.OwnerTenantId,
                     cancellationToken))
             {
+                await AuditDefinitionAsync(
+                    ApplicationAuditActions.WorkflowDefinitionRead,
+                    definition,
+                    AuditOutcome.Denied,
+                    cancellationToken);
                 return PermissionDenied<WorkflowDefinition?>();
             }
+
+            await AuditDefinitionReferenceAsync(
+                id,
+                version,
+                definition?.OwnerTenantId,
+                definition is null
+                    ? AuditOutcome.Failed
+                    : AuditOutcome.Succeeded,
+                cancellationToken);
 
             return ApplicationResult<WorkflowDefinition?>.Success(definition);
         }
@@ -120,6 +180,12 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         }
         catch (Exception)
         {
+            await AuditDefinitionReferenceAsync(
+                id,
+                version,
+                resourceTenantId: null,
+                AuditOutcome.Failed,
+                cancellationToken);
             return ApplicationResult<WorkflowDefinition?>.Failure(
                 PersistenceError("DefinitionReadFailed"));
         }
@@ -188,4 +254,36 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             new ApplicationError(
                 "PermissionDenied",
                 "The current user does not have permission."));
+
+    private Task AuditDefinitionAsync(
+        string action,
+        WorkflowDefinition definition,
+        AuditOutcome outcome,
+        CancellationToken cancellationToken) =>
+        _auditRecorder.TryRecordAsync(
+            action,
+            ApplicationAuditResourceTypes.WorkflowDefinition,
+            DefinitionResourceIdentifier(definition.Id, definition.Version),
+            outcome,
+            definition.OwnerTenantId,
+            cancellationToken);
+
+    private Task AuditDefinitionReferenceAsync(
+        WorkflowDefinitionId id,
+        string? version,
+        TenantId? resourceTenantId,
+        AuditOutcome outcome,
+        CancellationToken cancellationToken) =>
+        _auditRecorder.TryRecordAsync(
+            ApplicationAuditActions.WorkflowDefinitionRead,
+            ApplicationAuditResourceTypes.WorkflowDefinition,
+            DefinitionResourceIdentifier(id, version),
+            outcome,
+            resourceTenantId,
+            cancellationToken);
+
+    private static string DefinitionResourceIdentifier(
+        WorkflowDefinitionId id,
+        string? version) =>
+        $"{id.Value:D}:{version ?? string.Empty}";
 }

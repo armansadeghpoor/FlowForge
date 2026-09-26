@@ -3,6 +3,7 @@ using FlowForge.Abstractions.Definitions;
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Abstractions.Validation;
+using FlowForge.Application.Tests.Auditing;
 using FlowForge.Application.Definitions;
 using FlowForge.Application.Triggers;
 using FlowForge.Core.Domain.Definitions;
@@ -20,10 +21,15 @@ public sealed class ApplicationServicesTests
         var definition = CreateDefinition();
         var store = new FakeDefinitionStore();
         var authorization = new FakeAuthorizationService(AuthorizationDecision.Allow);
+        var auditStore = new RecordingAuditStore();
+        var auditContext = StaticAuditContext.Create(
+            tenantId: definition.OwnerTenantId);
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
             store,
-            authorization);
+            authorization,
+            auditStore,
+            auditContext);
 
         var result = await service.CreateAsync(definition, CancellationToken.None);
 
@@ -35,6 +41,16 @@ public sealed class ApplicationServicesTests
         var request = Assert.Single(authorization.Requests);
         Assert.Equal(Permissions.WorkflowDefinitionsWrite, request.Permission);
         Assert.Equal(definition.OwnerTenantId, request.OwnerTenantId);
+        var audit = Assert.Single(auditStore.Entries);
+        Assert.Equal("WorkflowDefinition.Create", audit.Action);
+        Assert.Equal(AuditOutcome.Succeeded, audit.Outcome);
+        Assert.Equal("user-1", audit.UserId);
+        Assert.Equal(definition.OwnerTenantId, audit.TenantId);
+        Assert.Equal(definition.OwnerTenantId, audit.ResourceTenantId);
+        Assert.Equal(auditContext.Current.CorrelationId, audit.CorrelationId);
+        Assert.Equal(
+            $"{definition.Id.Value:D}:{definition.Version}",
+            audit.ResourceIdentifier);
         Assert.Empty(result.Errors);
     }
 
@@ -46,7 +62,9 @@ public sealed class ApplicationServicesTests
             new FakeDefinitionValidator(
                 new ValidationError("DefinitionNameRequired", "Name is required.")),
             store,
-            new FakeAuthorizationService(AuthorizationDecision.Allow));
+            new FakeAuthorizationService(AuthorizationDecision.Allow),
+            new RecordingAuditStore(),
+            StaticAuditContext.Create());
 
         var result = await service.CreateAsync(
             CreateDefinition() with { Name = " " },
@@ -63,10 +81,13 @@ public sealed class ApplicationServicesTests
     {
         var definition = CreateDefinition();
         var store = new FakeDefinitionStore { DefinitionToReturn = definition };
+        var auditStore = new RecordingAuditStore();
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
             store,
-            new FakeAuthorizationService(AuthorizationDecision.Allow));
+            new FakeAuthorizationService(AuthorizationDecision.Allow),
+            auditStore,
+            StaticAuditContext.Create(tenantId: definition.OwnerTenantId));
 
         var result = await service.GetAsync(
             definition.Id,
@@ -75,6 +96,10 @@ public sealed class ApplicationServicesTests
 
         Assert.True(result.IsSuccess);
         Assert.Same(definition, result.Value);
+        var audit = Assert.Single(auditStore.Entries);
+        Assert.Equal("WorkflowDefinition.Read", audit.Action);
+        Assert.Equal(AuditOutcome.Succeeded, audit.Outcome);
+        Assert.Equal(definition.OwnerTenantId, audit.ResourceTenantId);
     }
 
     [Fact]
@@ -135,7 +160,9 @@ public sealed class ApplicationServicesTests
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
             store,
-            new FakeAuthorizationService(AuthorizationDecision.Allow));
+            new FakeAuthorizationService(AuthorizationDecision.Allow),
+            new RecordingAuditStore(),
+            StaticAuditContext.Create());
 
         var result = await service.CreateAsync(
             CreateDefinition(),
@@ -151,10 +178,15 @@ public sealed class ApplicationServicesTests
     public async Task DefinitionCreateAsync_DeniedAuthorization_DoesNotPersist()
     {
         var store = new FakeDefinitionStore();
+        var auditStore = new RecordingAuditStore();
+        var auditContext = StaticAuditContext.Create(
+            tenantId: new TenantId(Guid.NewGuid()));
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
             store,
-            new FakeAuthorizationService(AuthorizationDecision.Deny));
+            new FakeAuthorizationService(AuthorizationDecision.Deny),
+            auditStore,
+            auditContext);
 
         var result = await service.CreateAsync(
             CreateDefinition(),
@@ -163,6 +195,30 @@ public sealed class ApplicationServicesTests
         Assert.False(result.IsSuccess);
         Assert.Null(store.SavedDefinition);
         Assert.Equal("PermissionDenied", Assert.Single(result.Errors).Code);
+        var audit = Assert.Single(auditStore.Entries);
+        Assert.Equal(AuditOutcome.Denied, audit.Outcome);
+        Assert.Equal(auditContext.Current.TenantId, audit.TenantId);
+        Assert.Equal("WorkflowDefinition", audit.ResourceType);
+    }
+
+    [Fact]
+    public async Task DefinitionCreateAsync_AuditFailure_DoesNotChangeDeniedAuthorization()
+    {
+        var store = new FakeDefinitionStore();
+        var service = new WorkflowDefinitionService(
+            new FakeDefinitionValidator(),
+            store,
+            new FakeAuthorizationService(AuthorizationDecision.Deny),
+            new ThrowingAuditStore(),
+            StaticAuditContext.Create());
+
+        var result = await service.CreateAsync(
+            CreateDefinition(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("PermissionDenied", Assert.Single(result.Errors).Code);
+        Assert.Null(store.SavedDefinition);
     }
 
     [Fact]

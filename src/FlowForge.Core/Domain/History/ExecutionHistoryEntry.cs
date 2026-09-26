@@ -5,7 +5,7 @@ using FlowForge.Core.Domain.Identifiers;
 namespace FlowForge.Core.Domain.History;
 
 /// <summary>
-/// Represents an immutable audit entry for workflow execution activity.
+/// Represents an immutable workflow runtime transition history entry.
 /// </summary>
 public sealed record ExecutionHistoryEntry
 {
