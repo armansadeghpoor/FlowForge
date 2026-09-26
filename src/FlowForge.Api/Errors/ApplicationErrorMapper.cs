@@ -49,6 +49,15 @@ internal static class ApplicationErrorMapper
             return new ConflictObjectResult(response);
         }
 
+        if (errors.Any(error =>
+                error.Code.Equals("PermissionDenied", StringComparison.Ordinal)))
+        {
+            return new ObjectResult(response)
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
+        }
+
         if (errors.Count > 0 && errors.All(IsValidationError))
         {
             return new BadRequestObjectResult(response);

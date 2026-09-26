@@ -1,4 +1,5 @@
 using FlowForge.Abstractions.Definitions;
+using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Validation;
 using FlowForge.Application.Common;
 using FlowForge.Core.Domain.Definitions;
@@ -13,18 +14,22 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 {
     private readonly IWorkflowDefinitionValidator _validator;
     private readonly IWorkflowDefinitionStore _store;
+    private readonly IAuthorizationService _authorizationService;
 
     /// <summary>
     /// Initializes a workflow definition application service.
     /// </summary>
     public WorkflowDefinitionService(
         IWorkflowDefinitionValidator validator,
-        IWorkflowDefinitionStore store)
+        IWorkflowDefinitionStore store,
+        IAuthorizationService authorizationService)
     {
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(authorizationService);
         _validator = validator;
         _store = store;
+        _authorizationService = authorizationService;
     }
 
     /// <inheritdoc />
@@ -33,6 +38,14 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(definition);
+
+        if (!await IsAuthorizedAsync(
+                Permissions.WorkflowDefinitionsWrite,
+                definition.OwnerTenantId,
+                cancellationToken))
+        {
+            return PermissionDenied<WorkflowDefinition>();
+        }
 
         var validation = _validator.Validate(definition);
         if (!validation.IsValid)
@@ -79,9 +92,26 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                     "A workflow definition identifier and version are required."));
         }
 
+        if (!await IsAuthorizedAsync(
+                Permissions.WorkflowDefinitionsRead,
+                ownerTenantId: null,
+                cancellationToken))
+        {
+            return PermissionDenied<WorkflowDefinition?>();
+        }
+
         try
         {
             var definition = await _store.GetAsync(id, version, cancellationToken);
+            if (definition is not null &&
+                !await IsAuthorizedAsync(
+                    Permissions.WorkflowDefinitionsRead,
+                    definition.OwnerTenantId,
+                    cancellationToken))
+            {
+                return PermissionDenied<WorkflowDefinition?>();
+            }
+
             return ApplicationResult<WorkflowDefinition?>.Success(definition);
         }
         catch (OperationCanceledException)
@@ -99,9 +129,28 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     public async Task<ApplicationResult<IReadOnlyList<WorkflowDefinition>>> ListAsync(
         CancellationToken cancellationToken)
     {
+        if (!await IsAuthorizedAsync(
+                Permissions.WorkflowDefinitionsRead,
+                ownerTenantId: null,
+                cancellationToken))
+        {
+            return PermissionDenied<IReadOnlyList<WorkflowDefinition>>();
+        }
+
         try
         {
             var definitions = await _store.ListAsync(cancellationToken);
+            foreach (var definition in definitions)
+            {
+                if (!await IsAuthorizedAsync(
+                        Permissions.WorkflowDefinitionsRead,
+                        definition.OwnerTenantId,
+                        cancellationToken))
+                {
+                    return PermissionDenied<IReadOnlyList<WorkflowDefinition>>();
+                }
+            }
+
             return ApplicationResult<IReadOnlyList<WorkflowDefinition>>.Success(definitions);
         }
         catch (OperationCanceledException)
@@ -117,4 +166,26 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
     private static ApplicationError PersistenceError(string code) =>
         new(code, "The workflow definition store operation failed.");
+
+    private async Task<bool> IsAuthorizedAsync(
+        string permission,
+        TenantId? ownerTenantId,
+        CancellationToken cancellationToken)
+    {
+        var decision = await _authorizationService.AuthorizeAsync(
+            new AuthorizationRequest
+            {
+                Permission = permission,
+                OwnerTenantId = ownerTenantId
+            },
+            cancellationToken);
+
+        return decision.IsAllowed;
+    }
+
+    private static ApplicationResult<T> PermissionDenied<T>() =>
+        ApplicationResult<T>.Failure(
+            new ApplicationError(
+                "PermissionDenied",
+                "The current user does not have permission."));
 }

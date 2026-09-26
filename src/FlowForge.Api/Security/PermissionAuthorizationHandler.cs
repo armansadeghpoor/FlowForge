@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Security;
 using Microsoft.AspNetCore.Authorization;
 
 namespace FlowForge.Api.Security;
@@ -17,9 +18,13 @@ public sealed class PermissionAuthorizationHandler(
         var cancellationToken = context.Resource is HttpContext httpContext
             ? httpContext.RequestAborted
             : CancellationToken.None;
-        if (await authorizationService.AuthorizeAsync(
-                requirement.Permission,
-                cancellationToken))
+        var decision = await authorizationService.AuthorizeAsync(
+            new AuthorizationRequest
+            {
+                Permission = requirement.Permission
+            },
+            cancellationToken);
+        if (decision.IsAllowed)
         {
             context.Succeed(requirement);
         }

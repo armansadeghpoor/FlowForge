@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlowForge.Abstractions.Definitions;
+using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Abstractions.Validation;
 using FlowForge.Application.Definitions;
@@ -18,9 +19,11 @@ public sealed class ApplicationServicesTests
     {
         var definition = CreateDefinition();
         var store = new FakeDefinitionStore();
+        var authorization = new FakeAuthorizationService(AuthorizationDecision.Allow);
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
-            store);
+            store,
+            authorization);
 
         var result = await service.CreateAsync(definition, CancellationToken.None);
 
@@ -29,6 +32,9 @@ public sealed class ApplicationServicesTests
         Assert.Same(definition, store.SavedDefinition);
         Assert.Equal(definition.OwnerTenantId, result.Value!.OwnerTenantId);
         Assert.Equal(definition.OwnerTenantId, store.SavedDefinition!.OwnerTenantId);
+        var request = Assert.Single(authorization.Requests);
+        Assert.Equal(Permissions.WorkflowDefinitionsWrite, request.Permission);
+        Assert.Equal(definition.OwnerTenantId, request.OwnerTenantId);
         Assert.Empty(result.Errors);
     }
 
@@ -39,7 +45,8 @@ public sealed class ApplicationServicesTests
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(
                 new ValidationError("DefinitionNameRequired", "Name is required.")),
-            store);
+            store,
+            new FakeAuthorizationService(AuthorizationDecision.Allow));
 
         var result = await service.CreateAsync(
             CreateDefinition() with { Name = " " },
@@ -58,7 +65,8 @@ public sealed class ApplicationServicesTests
         var store = new FakeDefinitionStore { DefinitionToReturn = definition };
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
-            store);
+            store,
+            new FakeAuthorizationService(AuthorizationDecision.Allow));
 
         var result = await service.GetAsync(
             definition.Id,
@@ -126,7 +134,8 @@ public sealed class ApplicationServicesTests
         var store = new FakeDefinitionStore { SaveException = new IOException("store detail") };
         var service = new WorkflowDefinitionService(
             new FakeDefinitionValidator(),
-            store);
+            store,
+            new FakeAuthorizationService(AuthorizationDecision.Allow));
 
         var result = await service.CreateAsync(
             CreateDefinition(),
@@ -136,6 +145,24 @@ public sealed class ApplicationServicesTests
         var error = Assert.Single(result.Errors);
         Assert.Equal("DefinitionPersistenceFailed", error.Code);
         Assert.DoesNotContain("store detail", error.Message);
+    }
+
+    [Fact]
+    public async Task DefinitionCreateAsync_DeniedAuthorization_DoesNotPersist()
+    {
+        var store = new FakeDefinitionStore();
+        var service = new WorkflowDefinitionService(
+            new FakeDefinitionValidator(),
+            store,
+            new FakeAuthorizationService(AuthorizationDecision.Deny));
+
+        var result = await service.CreateAsync(
+            CreateDefinition(),
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(store.SavedDefinition);
+        Assert.Equal("PermissionDenied", Assert.Single(result.Errors).Code);
     }
 
     [Fact]
@@ -252,5 +279,19 @@ public sealed class ApplicationServicesTests
         public Task<IReadOnlyList<WorkflowTrigger>> ListAsync(
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<WorkflowTrigger>>([]);
+    }
+
+    private sealed class FakeAuthorizationService(AuthorizationDecision decision)
+        : IAuthorizationService
+    {
+        public List<AuthorizationRequest> Requests { get; } = [];
+
+        public Task<AuthorizationDecision> AuthorizeAsync(
+            AuthorizationRequest request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(decision);
+        }
     }
 }

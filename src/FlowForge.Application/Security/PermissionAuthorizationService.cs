@@ -1,33 +1,59 @@
 using FlowForge.Abstractions.Security;
+using FlowForge.Abstractions.Tenancy;
 
 namespace FlowForge.Application.Security;
 
 /// <summary>
-/// Evaluates permissions against the current provider-independent security context.
+/// Evaluates permissions and workflow ownership against current operation contexts.
 /// </summary>
 public sealed class PermissionAuthorizationService : IAuthorizationService
 {
     private readonly IUserContext _userContext;
+    private readonly ITenantContext _tenantContext;
 
     /// <summary>
     /// Initializes the authorization service.
     /// </summary>
-    public PermissionAuthorizationService(IUserContext userContext)
+    public PermissionAuthorizationService(
+        IUserContext userContext,
+        ITenantContext tenantContext)
     {
         ArgumentNullException.ThrowIfNull(userContext);
+        ArgumentNullException.ThrowIfNull(tenantContext);
         _userContext = userContext;
+        _tenantContext = tenantContext;
     }
 
     /// <inheritdoc />
-    public Task<bool> AuthorizeAsync(
-        string permission,
+    public Task<AuthorizationDecision> AuthorizeAsync(
+        AuthorizationRequest request,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(permission);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.Permission);
         cancellationToken.ThrowIfCancellationRequested();
 
         var context = _userContext.Current;
+        if (!context.IsAuthenticated ||
+            !context.Permissions.Contains(request.Permission))
+        {
+            return Task.FromResult(AuthorizationDecision.Deny);
+        }
+
+        if (request.OwnerTenantId is not { } ownerTenantId)
+        {
+            return Task.FromResult(AuthorizationDecision.Allow);
+        }
+
+        var tenantMatches = _tenantContext.TenantId == ownerTenantId;
+        var securityTenantMatches = Guid.TryParse(
+                context.TenantId,
+                out var securityTenantId) &&
+            securityTenantId == ownerTenantId.Value;
+
         return Task.FromResult(
-            context.IsAuthenticated && context.Permissions.Contains(permission));
+            tenantMatches && securityTenantMatches
+                ? AuthorizationDecision.Allow
+                : AuthorizationDecision.Deny);
     }
 }

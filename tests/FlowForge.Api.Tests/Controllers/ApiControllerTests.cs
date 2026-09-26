@@ -12,6 +12,7 @@ using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Core.Domain.Triggers;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FlowForge.Api.Tests.Controllers;
@@ -228,6 +229,40 @@ public sealed class ApiControllerTests
 
         Assert.IsType<NotFoundObjectResult>(workflowResult);
         Assert.IsType<NotFoundObjectResult>(executionResult);
+    }
+
+    [Fact]
+    public async Task WorkflowAuthorizationFailure_ReturnsCorrelatedForbiddenResponse()
+    {
+        const string correlationId = "workflow-authorization-correlation";
+        var service = new DefinitionServiceStub
+        {
+            GetResult = ApplicationResult<WorkflowDefinition?>.Failure(
+                new ApplicationError(
+                    "PermissionDenied",
+                    "The current user does not have permission."))
+        };
+        var controller = new WorkflowDefinitionsController(service)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    TraceIdentifier = correlationId
+                }
+            }
+        };
+
+        var result = await controller.GetAsync(
+            Guid.NewGuid(),
+            "1.0",
+            CancellationToken.None);
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        var response = Assert.IsType<ApiErrorResponse>(forbidden.Value);
+        Assert.Equal("PermissionDenied", response.Code);
+        Assert.Equal(correlationId, response.CorrelationId);
     }
 
     [Fact]

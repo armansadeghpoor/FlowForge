@@ -1,14 +1,14 @@
 namespace FlowForge.Abstractions.Security;
 
 /// <summary>
-/// Determines whether the current operation has a requested permission.
+/// Evaluates provider-independent permission and ownership requirements.
 /// </summary>
 public interface IAuthorizationService
 {
     /// <summary>
-    /// Determines whether the current security context has the requested permission.
+    /// Evaluates the supplied authorization request against the current contexts.
     /// </summary>
-    Task<bool> AuthorizeAsync(
-        string permission,
+    Task<AuthorizationDecision> AuthorizeAsync(
+        AuthorizationRequest request,
         CancellationToken cancellationToken);
 }
