@@ -38,6 +38,8 @@ public sealed record WorkflowDefinitionDto
 
     public required Guid OwnerTenantId { get; init; }
 
+    public required WorkflowSharingDto? Sharing { get; init; }
+
     public required string Name { get; init; }
 
     public required string Version { get; init; }
@@ -49,6 +51,22 @@ public sealed record WorkflowDefinitionDto
     public required IReadOnlyList<WorkflowNodeDto> Nodes { get; init; }
 
     public required IReadOnlyList<WorkflowEdgeDto> Edges { get; init; }
+}
+
+/// <summary>
+/// Represents workflow visibility metadata without changing workflow ownership.
+/// </summary>
+public sealed record WorkflowSharingDto
+{
+    public required Guid Id { get; init; }
+
+    public required string Visibility { get; init; }
+
+    public required Guid OwnerTenantId { get; init; }
+
+    public required IReadOnlyList<Guid> SharedTenantIds { get; init; }
+
+    public required DateTime CreatedAt { get; init; }
 }
 
 /// <summary>

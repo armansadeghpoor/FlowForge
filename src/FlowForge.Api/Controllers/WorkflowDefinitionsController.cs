@@ -4,6 +4,7 @@ using FlowForge.Api.Errors;
 using FlowForge.Api.Mapping;
 using FlowForge.Application.Common;
 using FlowForge.Application.Definitions;
+using FlowForge.Application.Sharing;
 using FlowForge.Core.Domain.Identifiers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,14 +19,19 @@ namespace FlowForge.Api.Controllers;
 public sealed class WorkflowDefinitionsController : ControllerBase
 {
     private readonly IWorkflowDefinitionService _service;
+    private readonly IWorkflowSharingService _sharingService;
 
     /// <summary>
     /// Initializes the controller.
     /// </summary>
-    public WorkflowDefinitionsController(IWorkflowDefinitionService service)
+    public WorkflowDefinitionsController(
+        IWorkflowDefinitionService service,
+        IWorkflowSharingService sharingService)
     {
         ArgumentNullException.ThrowIfNull(service);
+        ArgumentNullException.ThrowIfNull(sharingService);
         _service = service;
+        _sharingService = sharingService;
     }
 
     /// <summary>
@@ -74,7 +80,18 @@ public sealed class WorkflowDefinitionsController : ControllerBase
                 HttpContext);
         }
 
-        return Ok(result.Value.ToDto());
+        var sharingResult = await _sharingService.GetAsync(
+            result.Value.Id,
+            result.Value.Version,
+            cancellationToken);
+        if (!sharingResult.IsSuccess)
+        {
+            return ApplicationErrorMapper.ToActionResult(
+                sharingResult.Errors,
+                HttpContext);
+        }
+
+        return Ok(result.Value.ToDto(sharingResult.Value));
     }
 
     /// <summary>

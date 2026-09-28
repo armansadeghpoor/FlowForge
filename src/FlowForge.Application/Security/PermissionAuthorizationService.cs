@@ -1,5 +1,6 @@
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Tenancy;
+using FlowForge.Core.Domain.Enums;
 
 namespace FlowForge.Application.Security;
 
@@ -45,14 +46,37 @@ public sealed class PermissionAuthorizationService : IAuthorizationService
             return Task.FromResult(AuthorizationDecision.Allow);
         }
 
-        var tenantMatches = _tenantContext.TenantId == ownerTenantId;
-        var securityTenantMatches = Guid.TryParse(
+        var requestTenantId = _tenantContext.TenantId;
+        var securityTenantMatchesRequest =
+            requestTenantId is { } tenantId &&
+            Guid.TryParse(
                 context.TenantId,
                 out var securityTenantId) &&
-            securityTenantId == ownerTenantId.Value;
+            securityTenantId == tenantId.Value;
+
+        if (!securityTenantMatchesRequest)
+        {
+            return Task.FromResult(AuthorizationDecision.Deny);
+        }
+
+        if (requestTenantId == ownerTenantId)
+        {
+            return Task.FromResult(AuthorizationDecision.Allow);
+        }
+
+        var sharingAllowsTenant =
+            request.Sharing is { } sharing &&
+            sharing.OwnerTenantId == ownerTenantId &&
+            request.WorkflowDefinitionId == sharing.WorkflowDefinitionId &&
+            string.Equals(
+                request.DefinitionVersion,
+                sharing.DefinitionVersion,
+                StringComparison.Ordinal) &&
+            sharing.Visibility == WorkflowVisibility.Shared &&
+            sharing.SharedTenantIds.Contains(requestTenantId!.Value);
 
         return Task.FromResult(
-            tenantMatches && securityTenantMatches
+            sharingAllowsTenant
                 ? AuthorizationDecision.Allow
                 : AuthorizationDecision.Deny);
     }

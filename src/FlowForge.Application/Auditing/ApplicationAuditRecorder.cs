@@ -57,6 +57,8 @@ internal static class ApplicationAuditActions
 
     public const string WorkflowDefinitionRead = "WorkflowDefinition.Read";
 
+    public const string WorkflowSharingCreate = "WorkflowSharing.Create";
+
     public const string WorkflowTriggerExecute = "WorkflowTrigger.Execute";
 }
 

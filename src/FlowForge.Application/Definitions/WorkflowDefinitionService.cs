@@ -1,12 +1,14 @@
 using FlowForge.Abstractions.Auditing;
 using FlowForge.Abstractions.Definitions;
 using FlowForge.Abstractions.Security;
+using FlowForge.Abstractions.Sharing;
 using FlowForge.Abstractions.Validation;
 using FlowForge.Application.Auditing;
 using FlowForge.Application.Common;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Sharing;
 
 namespace FlowForge.Application.Definitions;
 
@@ -18,6 +20,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private readonly IWorkflowDefinitionValidator _validator;
     private readonly IWorkflowDefinitionStore _store;
     private readonly IAuthorizationService _authorizationService;
+    private readonly IWorkflowSharingStore _sharingStore;
     private readonly ApplicationAuditRecorder _auditRecorder;
 
     /// <summary>
@@ -27,17 +30,20 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         IWorkflowDefinitionValidator validator,
         IWorkflowDefinitionStore store,
         IAuthorizationService authorizationService,
+        IWorkflowSharingStore sharingStore,
         IAuditStore auditStore,
         IAuditContext auditContext)
     {
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(authorizationService);
+        ArgumentNullException.ThrowIfNull(sharingStore);
         ArgumentNullException.ThrowIfNull(auditStore);
         ArgumentNullException.ThrowIfNull(auditContext);
         _validator = validator;
         _store = store;
         _authorizationService = authorizationService;
+        _sharingStore = sharingStore;
         _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext);
     }
 
@@ -51,6 +57,9 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         if (!await IsAuthorizedAsync(
                 Permissions.WorkflowDefinitionsWrite,
                 definition.OwnerTenantId,
+                definition.Id,
+                definition.Version,
+                sharing: null,
                 cancellationToken))
         {
             await AuditDefinitionAsync(
@@ -135,6 +144,9 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         if (!await IsAuthorizedAsync(
                 Permissions.WorkflowDefinitionsRead,
                 ownerTenantId: null,
+                workflowDefinitionId: null,
+                definitionVersion: null,
+                sharing: null,
                 cancellationToken))
         {
             await AuditDefinitionReferenceAsync(
@@ -149,10 +161,15 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         try
         {
             var definition = await _store.GetAsync(id, version, cancellationToken);
-            if (definition is not null &&
-                !await IsAuthorizedAsync(
+            var sharing = definition is null
+                ? null
+                : await _sharingStore.GetAsync(id, version, cancellationToken);
+            if (definition is not null && !await IsAuthorizedAsync(
                     Permissions.WorkflowDefinitionsRead,
                     definition.OwnerTenantId,
+                    definition.Id,
+                    definition.Version,
+                    sharing,
                     cancellationToken))
             {
                 await AuditDefinitionAsync(
@@ -198,6 +215,9 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         if (!await IsAuthorizedAsync(
                 Permissions.WorkflowDefinitionsRead,
                 ownerTenantId: null,
+                workflowDefinitionId: null,
+                definitionVersion: null,
+                sharing: null,
                 cancellationToken))
         {
             return PermissionDenied<IReadOnlyList<WorkflowDefinition>>();
@@ -208,9 +228,16 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             var definitions = await _store.ListAsync(cancellationToken);
             foreach (var definition in definitions)
             {
+                var sharing = await _sharingStore.GetAsync(
+                    definition.Id,
+                    definition.Version,
+                    cancellationToken);
                 if (!await IsAuthorizedAsync(
                         Permissions.WorkflowDefinitionsRead,
                         definition.OwnerTenantId,
+                        definition.Id,
+                        definition.Version,
+                        sharing,
                         cancellationToken))
                 {
                     return PermissionDenied<IReadOnlyList<WorkflowDefinition>>();
@@ -236,13 +263,19 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private async Task<bool> IsAuthorizedAsync(
         string permission,
         TenantId? ownerTenantId,
+        WorkflowDefinitionId? workflowDefinitionId,
+        string? definitionVersion,
+        WorkflowSharing? sharing,
         CancellationToken cancellationToken)
     {
         var decision = await _authorizationService.AuthorizeAsync(
             new AuthorizationRequest
             {
                 Permission = permission,
-                OwnerTenantId = ownerTenantId
+                OwnerTenantId = ownerTenantId,
+                WorkflowDefinitionId = workflowDefinitionId,
+                DefinitionVersion = definitionVersion,
+                Sharing = sharing
             },
             cancellationToken);
 

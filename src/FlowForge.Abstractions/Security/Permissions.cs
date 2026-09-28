@@ -11,6 +11,9 @@ public static class Permissions
     /// <summary>Allows creating workflow definition versions.</summary>
     public const string WorkflowDefinitionsWrite = "workflow-definitions.write";
 
+    /// <summary>Allows creating workflow definition sharing metadata.</summary>
+    public const string WorkflowDefinitionsShare = "workflow-definitions.share";
+
     /// <summary>Allows reading workflow triggers.</summary>
     public const string WorkflowTriggersRead = "workflow-triggers.read";
 

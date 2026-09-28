@@ -6,6 +6,7 @@ using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Sharing;
 using FlowForge.Core.Domain.Triggers;
 
 namespace FlowForge.Api.Mapping;
@@ -38,11 +39,26 @@ internal static class ApiMappings
                 .ToArray())
         };
 
-    public static WorkflowDefinitionDto ToDto(this WorkflowDefinition definition) =>
+    public static WorkflowDefinitionDto ToDto(
+        this WorkflowDefinition definition,
+        WorkflowSharing? sharing = null) =>
         new()
         {
             Id = definition.Id.Value,
             OwnerTenantId = definition.OwnerTenantId.Value,
+            Sharing = sharing is null
+                ? null
+                : new WorkflowSharingDto
+                {
+                    Id = sharing.Id.Value,
+                    Visibility = sharing.Visibility.ToString(),
+                    OwnerTenantId = sharing.OwnerTenantId.Value,
+                    SharedTenantIds = Array.AsReadOnly(
+                        sharing.SharedTenantIds
+                            .Select(tenantId => tenantId.Value)
+                            .ToArray()),
+                    CreatedAt = sharing.CreatedAt
+                },
             Name = definition.Name,
             Version = definition.Version,
             Description = definition.Description,

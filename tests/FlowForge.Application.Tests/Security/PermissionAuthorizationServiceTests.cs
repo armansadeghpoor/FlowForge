@@ -1,7 +1,9 @@
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Tenancy;
 using FlowForge.Application.Security;
+using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Sharing;
 
 namespace FlowForge.Application.Tests.Security;
 
@@ -163,13 +165,93 @@ public sealed class PermissionAuthorizationServiceTests
         Assert.Same(AuthorizationDecision.Deny, decision);
     }
 
+    [Fact]
+    public async Task AuthorizeAsync_ExactSharedWorkflow_AllowsTargetTenant()
+    {
+        var ownerTenantId = new TenantId(Guid.NewGuid());
+        var requestTenantId = new TenantId(Guid.NewGuid());
+        var workflowDefinitionId = new WorkflowDefinitionId(Guid.NewGuid());
+        var sharing = CreateSharing(
+            workflowDefinitionId,
+            ownerTenantId,
+            requestTenantId);
+        var service = CreateService(
+            new SecurityContext(
+                "user-1",
+                true,
+                [Permissions.WorkflowDefinitionsRead],
+                requestTenantId.Value.ToString("D")),
+            new TenantContext(requestTenantId));
+
+        var decision = await service.AuthorizeAsync(
+            Request(
+                Permissions.WorkflowDefinitionsRead,
+                ownerTenantId,
+                workflowDefinitionId,
+                "1.0",
+                sharing),
+            CancellationToken.None);
+
+        Assert.Same(AuthorizationDecision.Allow, decision);
+    }
+
+    [Fact]
+    public async Task AuthorizeAsync_SharingForDifferentWorkflow_DeniesTargetTenant()
+    {
+        var ownerTenantId = new TenantId(Guid.NewGuid());
+        var requestTenantId = new TenantId(Guid.NewGuid());
+        var sharing = CreateSharing(
+            new WorkflowDefinitionId(Guid.NewGuid()),
+            ownerTenantId,
+            requestTenantId);
+        var service = CreateService(
+            new SecurityContext(
+                "user-1",
+                true,
+                [Permissions.WorkflowDefinitionsRead],
+                requestTenantId.Value.ToString("D")),
+            new TenantContext(requestTenantId));
+
+        var decision = await service.AuthorizeAsync(
+            Request(
+                Permissions.WorkflowDefinitionsRead,
+                ownerTenantId,
+                new WorkflowDefinitionId(Guid.NewGuid()),
+                "1.0",
+                sharing),
+            CancellationToken.None);
+
+        Assert.Same(AuthorizationDecision.Deny, decision);
+    }
+
     private static AuthorizationRequest Request(
         string permission,
-        TenantId? ownerTenantId = null) =>
+        TenantId? ownerTenantId = null,
+        WorkflowDefinitionId? workflowDefinitionId = null,
+        string? definitionVersion = null,
+        WorkflowSharing? sharing = null) =>
         new()
         {
             Permission = permission,
-            OwnerTenantId = ownerTenantId
+            OwnerTenantId = ownerTenantId,
+            WorkflowDefinitionId = workflowDefinitionId,
+            DefinitionVersion = definitionVersion,
+            Sharing = sharing
+        };
+
+    private static WorkflowSharing CreateSharing(
+        WorkflowDefinitionId workflowDefinitionId,
+        TenantId ownerTenantId,
+        TenantId sharedTenantId) =>
+        new()
+        {
+            Id = new WorkflowSharingId(Guid.NewGuid()),
+            WorkflowDefinitionId = workflowDefinitionId,
+            DefinitionVersion = "1.0",
+            OwnerTenantId = ownerTenantId,
+            Visibility = WorkflowVisibility.Shared,
+            SharedTenantIds = [sharedTenantId],
+            CreatedAt = DateTime.UtcNow
         };
 
     private static PermissionAuthorizationService CreateService(

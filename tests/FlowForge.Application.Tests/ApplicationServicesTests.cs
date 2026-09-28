@@ -1,6 +1,7 @@
 using System.Text.Json;
 using FlowForge.Abstractions.Definitions;
 using FlowForge.Abstractions.Security;
+using FlowForge.Abstractions.Sharing;
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Abstractions.Validation;
 using FlowForge.Application.Tests.Auditing;
@@ -9,6 +10,7 @@ using FlowForge.Application.Triggers;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Sharing;
 using FlowForge.Core.Domain.Triggers;
 
 namespace FlowForge.Application.Tests;
@@ -28,6 +30,7 @@ public sealed class ApplicationServicesTests
             new FakeDefinitionValidator(),
             store,
             authorization,
+            new FakeSharingStore(),
             auditStore,
             auditContext);
 
@@ -63,6 +66,7 @@ public sealed class ApplicationServicesTests
                 new ValidationError("DefinitionNameRequired", "Name is required.")),
             store,
             new FakeAuthorizationService(AuthorizationDecision.Allow),
+            new FakeSharingStore(),
             new RecordingAuditStore(),
             StaticAuditContext.Create());
 
@@ -86,6 +90,7 @@ public sealed class ApplicationServicesTests
             new FakeDefinitionValidator(),
             store,
             new FakeAuthorizationService(AuthorizationDecision.Allow),
+            new FakeSharingStore(),
             auditStore,
             StaticAuditContext.Create(tenantId: definition.OwnerTenantId));
 
@@ -161,6 +166,7 @@ public sealed class ApplicationServicesTests
             new FakeDefinitionValidator(),
             store,
             new FakeAuthorizationService(AuthorizationDecision.Allow),
+            new FakeSharingStore(),
             new RecordingAuditStore(),
             StaticAuditContext.Create());
 
@@ -185,6 +191,7 @@ public sealed class ApplicationServicesTests
             new FakeDefinitionValidator(),
             store,
             new FakeAuthorizationService(AuthorizationDecision.Deny),
+            new FakeSharingStore(),
             auditStore,
             auditContext);
 
@@ -209,6 +216,7 @@ public sealed class ApplicationServicesTests
             new FakeDefinitionValidator(),
             store,
             new FakeAuthorizationService(AuthorizationDecision.Deny),
+            new FakeSharingStore(),
             new ThrowingAuditStore(),
             StaticAuditContext.Create());
 
@@ -335,6 +343,19 @@ public sealed class ApplicationServicesTests
         public Task<IReadOnlyList<WorkflowTrigger>> ListAsync(
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<WorkflowTrigger>>([]);
+    }
+
+    private sealed class FakeSharingStore : IWorkflowSharingStore
+    {
+        public Task SaveAsync(
+            WorkflowSharing sharing,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<WorkflowSharing?> GetAsync(
+            WorkflowDefinitionId workflowDefinitionId,
+            string definitionVersion,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<WorkflowSharing?>(null);
     }
 
     private sealed class FakeAuthorizationService(AuthorizationDecision decision)

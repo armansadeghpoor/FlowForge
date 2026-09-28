@@ -6,11 +6,13 @@ using FlowForge.Api.Controllers;
 using FlowForge.Application.Common;
 using FlowForge.Application.Definitions;
 using FlowForge.Application.Queries;
+using FlowForge.Application.Sharing;
 using FlowForge.Application.Triggers;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
+using FlowForge.Core.Domain.Sharing;
 using FlowForge.Core.Domain.Triggers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -27,7 +29,9 @@ public sealed class ApiControllerTests
         {
             CreateResult = ApplicationResult<WorkflowDefinition>.Success(definition)
         };
-        var controller = new WorkflowDefinitionsController(service);
+        var controller = new WorkflowDefinitionsController(
+            service,
+            new SharingServiceStub());
 
         var result = await controller.CreateAsync(
             CreateDefinitionRequest(definition),
@@ -50,7 +54,9 @@ public sealed class ApiControllerTests
             CreateResult = ApplicationResult<WorkflowDefinition>.Failure(
                 new ApplicationError("DefinitionVersionRequired", "A version is required."))
         };
-        var controller = new WorkflowDefinitionsController(service);
+        var controller = new WorkflowDefinitionsController(
+            service,
+            new SharingServiceStub());
 
         var result = await controller.CreateAsync(
             CreateDefinitionRequest(CreateDefinition()),
@@ -71,7 +77,22 @@ public sealed class ApiControllerTests
         {
             GetResult = ApplicationResult<WorkflowDefinition?>.Success(definition)
         };
-        var controller = new WorkflowDefinitionsController(service);
+        var sharing = new WorkflowSharing
+        {
+            Id = new WorkflowSharingId(Guid.NewGuid()),
+            WorkflowDefinitionId = definition.Id,
+            DefinitionVersion = definition.Version,
+            OwnerTenantId = definition.OwnerTenantId,
+            Visibility = WorkflowVisibility.Shared,
+            SharedTenantIds = [new TenantId(Guid.NewGuid())],
+            CreatedAt = DateTime.UtcNow
+        };
+        var controller = new WorkflowDefinitionsController(
+            service,
+            new SharingServiceStub
+            {
+                GetResult = ApplicationResult<WorkflowSharing?>.Success(sharing)
+            });
 
         var result = await controller.GetAsync(
             definition.Id.Value,
@@ -82,6 +103,13 @@ public sealed class ApiControllerTests
         var response = Assert.IsType<WorkflowDefinitionDto>(ok.Value);
         Assert.Equal(definition.Name, response.Name);
         Assert.Equal(definition.OwnerTenantId.Value, response.OwnerTenantId);
+        Assert.NotNull(response.Sharing);
+        Assert.Equal(sharing.Id.Value, response.Sharing.Id);
+        Assert.Equal("Shared", response.Sharing.Visibility);
+        Assert.Equal(definition.OwnerTenantId.Value, response.Sharing.OwnerTenantId);
+        Assert.Equal(
+            sharing.SharedTenantIds.Select(tenantId => tenantId.Value),
+            response.Sharing.SharedTenantIds);
         Assert.Single(response.Nodes);
     }
 
@@ -222,7 +250,9 @@ public sealed class ApiControllerTests
                 new ApplicationError("ExecutionNotFound", "The execution was not found."))
         };
 
-        var workflowResult = await new WorkflowDefinitionsController(definitionService)
+        var workflowResult = await new WorkflowDefinitionsController(
+                definitionService,
+                new SharingServiceStub())
             .GetAsync(Guid.NewGuid(), "1.0", CancellationToken.None);
         var executionResult = await new ExecutionsController(queryService)
             .GetSummaryAsync(Guid.NewGuid(), CancellationToken.None);
@@ -242,7 +272,9 @@ public sealed class ApiControllerTests
                     "PermissionDenied",
                     "The current user does not have permission."))
         };
-        var controller = new WorkflowDefinitionsController(service)
+        var controller = new WorkflowDefinitionsController(
+            service,
+            new SharingServiceStub())
         {
             ControllerContext = new ControllerContext
             {
@@ -384,6 +416,28 @@ public sealed class ApiControllerTests
         public Task<ApplicationResult<IReadOnlyList<WorkflowTrigger>>> ListAsync(
             CancellationToken cancellationToken) =>
             Task.FromResult(ApplicationResult<IReadOnlyList<WorkflowTrigger>>.Success([]));
+    }
+
+    private sealed class SharingServiceStub : IWorkflowSharingService
+    {
+        public ApplicationResult<WorkflowSharing?> GetResult { get; init; } =
+            ApplicationResult<WorkflowSharing?>.Success(null);
+
+        public Task<ApplicationResult<WorkflowSharing>> CreateAsync(
+            WorkflowSharing sharing,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(ApplicationResult<WorkflowSharing>.Success(sharing));
+
+        public Task<ApplicationResult<WorkflowSharing?>> GetAsync(
+            WorkflowDefinitionId workflowDefinitionId,
+            string definitionVersion,
+            CancellationToken cancellationToken) => Task.FromResult(GetResult);
+
+        public Task<ApplicationResult<bool>> ResolveVisibilityAsync(
+            WorkflowDefinitionId workflowDefinitionId,
+            string definitionVersion,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(ApplicationResult<bool>.Success(true));
     }
 
     private sealed class ExecutionQueryServiceStub : IWorkflowExecutionQueryService
