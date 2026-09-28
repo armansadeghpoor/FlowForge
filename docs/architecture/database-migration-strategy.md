@@ -11,6 +11,13 @@ providers. PostgreSQL integration tests create an isolated schema and execute
 the script before running. This gives new databases and tests a deterministic
 starting point.
 
+The baseline includes durable enterprise audit and workflow sharing tables.
+Audit entries are append-only and retain queryable tenant, correlation,
+resource, and timestamp columns while optional metadata remains JSONB.
+Workflow sharing records remain immutable per definition version, retain the
+owner tenant separately from shared tenants, and use a PostgreSQL UUID array
+for shared-tenant membership.
+
 The current approach is intentionally a bootstrap mechanism, not a migration
 system. The runtime does not:
 
@@ -96,7 +103,8 @@ schema changes.
 
 ## Current Decision
 
-No migration implementation is introduced in Phase 10.6. The initial script
-continues to bootstrap disposable databases and isolated test schemas. Adding a
-production database or retaining data across releases is the trigger for
-adopting the versioned strategy above.
+No migration implementation is introduced in Phase 13.0. The updated initial
+script continues to bootstrap disposable databases and isolated test schemas.
+Before an existing environment is upgraded to include the enterprise audit and
+workflow sharing tables, the versioned strategy above must be adopted instead
+of reapplying or editing an already deployed baseline.
