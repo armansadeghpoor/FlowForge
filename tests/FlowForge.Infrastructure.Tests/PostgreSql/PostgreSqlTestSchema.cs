@@ -10,8 +10,14 @@ internal sealed class PostgreSqlTestSchema : IAsyncDisposable
 
     private readonly string? _baseConnectionString =
         Environment.GetEnvironmentVariable(ConnectionStringEnvironmentVariable);
+    private readonly bool _applyInitialSchema;
     private readonly string _schemaName = $"flowforge_test_{Guid.NewGuid():N}";
     private string? _storeConnectionString;
+
+    public PostgreSqlTestSchema(bool applyInitialSchema = true)
+    {
+        _applyInitialSchema = applyInitialSchema;
+    }
 
     public async Task InitializeAsync()
     {
@@ -34,8 +40,13 @@ internal sealed class PostgreSqlTestSchema : IAsyncDisposable
             new NpgsqlConnectionStringBuilder(_baseConnectionString)
             {
                 SearchPath = _schemaName
-            };
+        };
         _storeConnectionString = connectionStringBuilder.ConnectionString;
+
+        if (!_applyInitialSchema)
+        {
+            return;
+        }
 
         var schemaScriptPath = Path.Combine(
             AppContext.BaseDirectory,
