@@ -51,12 +51,34 @@ The default security configuration is anonymous-friendly. If `FlowForge__Securit
 
 The host does not run database migrations. The database schema must be provisioned separately before deployment.
 
-## Health endpoint
+## Health and readiness endpoints
 
-Use `GET /health` for an application-level liveness check:
+Use `GET /health/live` to determine whether the API process is running:
 
 ```shell
-curl --fail http://localhost:8080/health
+curl --fail http://localhost:8080/health/live
 ```
 
-The response includes application status, environment name, and application version. This endpoint intentionally does not probe PostgreSQL or other external dependencies, so it is a liveness signal rather than a dependency-readiness guarantee.
+Liveness never probes PostgreSQL or another external dependency. A successful
+response means the process can answer HTTP requests; it does not mean the
+application can perform database-backed work.
+
+Use `GET /health/ready` to determine whether the API can serve application
+requests:
+
+```shell
+curl --fail http://localhost:8080/health/ready
+```
+
+When `FlowForge__Database__ConnectionString` is configured, readiness opens a
+PostgreSQL connection and executes a lightweight `SELECT 1` query. The endpoint
+returns HTTP `200` when every configured dependency is healthy and HTTP `503`
+when any dependency is unavailable.
+
+Both responses include stable status, application name, environment, version,
+request correlation identifier, and safe dependency status where applicable.
+They never include connection strings, credentials, exceptions, or stack
+traces. Supply `X-Correlation-Id` to preserve a caller-provided identifier.
+
+`GET /health` remains available as the backward-compatible process-level health
+endpoint and, like liveness, does not probe dependencies.

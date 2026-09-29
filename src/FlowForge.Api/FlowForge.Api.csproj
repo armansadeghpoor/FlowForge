@@ -4,6 +4,7 @@
     <ProjectReference Include="..\FlowForge.Application\FlowForge.Application.csproj" />
     <ProjectReference Include="..\FlowForge.Abstractions\FlowForge.Abstractions.csproj" />
     <ProjectReference Include="..\FlowForge.Core\FlowForge.Core.csproj" />
+    <ProjectReference Include="..\FlowForge.Infrastructure\FlowForge.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

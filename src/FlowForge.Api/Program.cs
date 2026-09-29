@@ -8,6 +8,7 @@ using FlowForge.Application.Security;
 using FlowForge.Application.Sharing;
 using FlowForge.Application.Triggers;
 using FlowForge.Api.Configuration;
+using FlowForge.Api.Health;
 using FlowForge.Api.Hosting;
 using FlowForge.Api.Observability;
 
@@ -16,6 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddFlowForgeApi();
 builder.Services.AddFlowForgeConfiguration(builder.Configuration);
 builder.Services.AddFlowForgeAuthentication(builder.Configuration);
+builder.Services.AddFlowForgeHealth(builder.Configuration);
 builder.Services.AddFlowForgeHosting(builder.Environment);
 builder.Services.AddFlowForgeObservability();
 builder.Services.AddScoped<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();

@@ -5,7 +5,7 @@ namespace FlowForge.Api.Tests.Architecture;
 public sealed class DependencyRulesTests
 {
     [Fact]
-    public void Api_DoesNotReferenceEngineOrInfrastructure()
+    public void Api_CompositionRootReferencesInfrastructureButNotEngine()
     {
         var references = typeof(WorkflowDefinitionsController).Assembly
             .GetReferencedAssemblies()
@@ -13,6 +13,6 @@ public sealed class DependencyRulesTests
             .ToArray();
 
         Assert.DoesNotContain("FlowForge.Engine", references);
-        Assert.DoesNotContain("FlowForge.Infrastructure", references);
+        Assert.Contains("FlowForge.Infrastructure", references);
     }
 }

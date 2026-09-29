@@ -298,14 +298,14 @@ public sealed class ApiControllerTests
     }
 
     [Fact]
-    public void ApiProject_DoesNotReferenceInfrastructureOrEngine()
+    public void ApiProject_ComposesInfrastructureWithoutReferencingEngine()
     {
         var references = typeof(WorkflowDefinitionsController).Assembly
             .GetReferencedAssemblies()
             .Select(reference => reference.Name)
             .ToArray();
 
-        Assert.DoesNotContain("FlowForge.Infrastructure", references);
+        Assert.Contains("FlowForge.Infrastructure", references);
         Assert.DoesNotContain("FlowForge.Engine", references);
     }
 
