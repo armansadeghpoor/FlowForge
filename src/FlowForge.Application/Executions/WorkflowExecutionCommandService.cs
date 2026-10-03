@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlowForge.Abstractions.Auditing;
+using FlowForge.Abstractions.Observability;
 using FlowForge.Abstractions.Triggers;
 using FlowForge.Application.Auditing;
 using FlowForge.Application.Common;
@@ -22,13 +23,15 @@ public sealed class WorkflowExecutionCommandService : IWorkflowExecutionCommandS
     public WorkflowExecutionCommandService(
         IWorkflowTriggerExecutor triggerExecutor,
         IAuditStore auditStore,
-        IAuditContext auditContext)
+        IAuditContext auditContext,
+        IMetricsCollector? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(triggerExecutor);
         ArgumentNullException.ThrowIfNull(auditStore);
         ArgumentNullException.ThrowIfNull(auditContext);
+        metrics ??= NullMetricsCollector.Instance;
         _triggerExecutor = triggerExecutor;
-        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext);
+        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext, metrics);
     }
 
     /// <inheritdoc />

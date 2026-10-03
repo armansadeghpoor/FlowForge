@@ -13,10 +13,10 @@ public sealed class RequestLoggingMiddleware(
     IMetricsCollector metrics)
 {
     /// <summary>Gets the total HTTP request counter name.</summary>
-    public const string RequestCountMetric = "http.server.requests";
+    public const string RequestCountMetric = OperationalMetricNames.HttpRequests;
 
     /// <summary>Gets the HTTP request duration metric name.</summary>
-    public const string RequestDurationMetric = "http.server.request.duration";
+    public const string RequestDurationMetric = OperationalMetricNames.HttpRequestDuration;
 
     /// <summary>
     /// Logs and measures the current request lifecycle.
@@ -38,6 +38,9 @@ public sealed class RequestLoggingMiddleware(
             metrics.IncrementCounter(RequestCountMetric);
             metrics.IncrementCounter(
                 $"http.server.responses.{context.Response.StatusCode}");
+            metrics.IncrementCounter(
+                $"{OperationalMetricNames.HttpResponseCategoryPrefix}." +
+                GetStatusCategory(context.Response.StatusCode));
             metrics.RecordDuration(RequestDurationMetric, duration);
 
             logger.LogInformation(
@@ -50,4 +53,9 @@ public sealed class RequestLoggingMiddleware(
                 correlationId);
         }
     }
+
+    private static string GetStatusCategory(int statusCode) =>
+        statusCode is >= 100 and <= 599
+            ? $"{statusCode / 100}xx"
+            : "other";
 }

@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
 using FlowForge.Abstractions.Engine;
 using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Abstractions.Observability;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
@@ -21,6 +23,7 @@ public sealed class WorkflowExecutor
     private readonly INodeRunnerRegistry _nodeRunnerRegistry;
     private readonly IStateStore _stateStore;
     private readonly ExecutionPipeline _executionPipeline;
+    private readonly IMetricsCollector _metrics;
 
     /// <summary>
     /// Initializes a new workflow executor.
@@ -28,10 +31,12 @@ public sealed class WorkflowExecutor
     /// <param name="nodeRunnerRegistry">The registry used to resolve node runners.</param>
     /// <param name="stateStore">The store used to persist execution state.</param>
     /// <param name="executionPipeline">The pipeline used to execute node runners.</param>
+    /// <param name="metrics">The optional operational metrics collector.</param>
     public WorkflowExecutor(
         INodeRunnerRegistry nodeRunnerRegistry,
         IStateStore stateStore,
-        ExecutionPipeline executionPipeline)
+        ExecutionPipeline executionPipeline,
+        IMetricsCollector? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(nodeRunnerRegistry);
         ArgumentNullException.ThrowIfNull(stateStore);
@@ -39,6 +44,7 @@ public sealed class WorkflowExecutor
         _nodeRunnerRegistry = nodeRunnerRegistry;
         _stateStore = stateStore;
         _executionPipeline = executionPipeline;
+        _metrics = metrics ?? NullMetricsCollector.Instance;
     }
 
     /// <summary>
@@ -65,6 +71,7 @@ public sealed class WorkflowExecutor
                 $"Workflow graph validation failed:{Environment.NewLine}{validationDetails}");
         }
 
+        var metricStartedAt = Stopwatch.GetTimestamp();
         var startedAt = DateTime.UtcNow;
         var execution = new WorkflowExecution
         {
@@ -81,6 +88,7 @@ public sealed class WorkflowExecutor
             Nodes = Array.Empty<NodeExecutionState>()
         };
         await _stateStore.CreateExecutionAsync(execution, cancellationToken);
+        _metrics.IncrementCounter(OperationalMetricNames.WorkflowExecutionsStarted);
         await AppendHistoryAsync(
             execution.Id,
             null,
@@ -119,6 +127,7 @@ public sealed class WorkflowExecutor
                     WorkflowExecutionStatus.Failed,
                     nodeStates,
                     request,
+                    metricStartedAt,
                     cancellationToken);
             }
         }
@@ -128,6 +137,7 @@ public sealed class WorkflowExecutor
             WorkflowExecutionStatus.Succeeded,
             nodeStates,
             request,
+            metricStartedAt,
             cancellationToken);
     }
 
@@ -250,6 +260,7 @@ public sealed class WorkflowExecutor
         WorkflowExecutionStatus status,
         IEnumerable<NodeExecutionState> nodeStates,
         WorkflowExecutionRequest request,
+        long metricStartedAt,
         CancellationToken cancellationToken)
     {
         var completedAt = DateTime.UtcNow;
@@ -274,6 +285,15 @@ public sealed class WorkflowExecutor
             completedAt,
             request,
             cancellationToken);
+
+        _metrics.IncrementCounter(OperationalMetricNames.WorkflowExecutionsCompleted);
+        _metrics.IncrementCounter(
+            status == WorkflowExecutionStatus.Succeeded
+                ? OperationalMetricNames.WorkflowExecutionsSucceeded
+                : OperationalMetricNames.WorkflowExecutionsFailed);
+        _metrics.RecordDuration(
+            OperationalMetricNames.WorkflowExecutionDuration,
+            Stopwatch.GetElapsedTime(metricStartedAt));
 
         return execution with
         {

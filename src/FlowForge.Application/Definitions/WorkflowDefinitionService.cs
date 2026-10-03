@@ -1,5 +1,6 @@
 using FlowForge.Abstractions.Auditing;
 using FlowForge.Abstractions.Definitions;
+using FlowForge.Abstractions.Observability;
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Sharing;
 using FlowForge.Abstractions.Validation;
@@ -22,6 +23,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private readonly IAuthorizationService _authorizationService;
     private readonly IWorkflowSharingStore _sharingStore;
     private readonly ApplicationAuditRecorder _auditRecorder;
+    private readonly IMetricsCollector _metrics;
 
     /// <summary>
     /// Initializes a workflow definition application service.
@@ -32,7 +34,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         IAuthorizationService authorizationService,
         IWorkflowSharingStore sharingStore,
         IAuditStore auditStore,
-        IAuditContext auditContext)
+        IAuditContext auditContext,
+        IMetricsCollector? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(validator);
         ArgumentNullException.ThrowIfNull(store);
@@ -40,11 +43,13 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         ArgumentNullException.ThrowIfNull(sharingStore);
         ArgumentNullException.ThrowIfNull(auditStore);
         ArgumentNullException.ThrowIfNull(auditContext);
+        metrics ??= NullMetricsCollector.Instance;
         _validator = validator;
         _store = store;
         _authorizationService = authorizationService;
         _sharingStore = sharingStore;
-        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext);
+        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext, metrics);
+        _metrics = metrics;
     }
 
     /// <inheritdoc />
@@ -91,6 +96,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 definition,
                 AuditOutcome.Succeeded,
                 cancellationToken);
+            _metrics.IncrementCounter(
+                OperationalMetricNames.WorkflowDefinitionsCreated);
             return ApplicationResult<WorkflowDefinition>.Success(definition);
         }
         catch (OperationCanceledException)
@@ -189,6 +196,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                     : AuditOutcome.Succeeded,
                 cancellationToken);
 
+            _metrics.IncrementCounter(
+                OperationalMetricNames.WorkflowDefinitionsRead);
             return ApplicationResult<WorkflowDefinition?>.Success(definition);
         }
         catch (OperationCanceledException)
@@ -244,6 +253,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
                 }
             }
 
+            _metrics.IncrementCounter(
+                OperationalMetricNames.WorkflowDefinitionsListed);
             return ApplicationResult<IReadOnlyList<WorkflowDefinition>>.Success(definitions);
         }
         catch (OperationCanceledException)

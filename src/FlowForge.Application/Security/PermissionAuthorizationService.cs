@@ -1,3 +1,4 @@
+using FlowForge.Abstractions.Observability;
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Tenancy;
 using FlowForge.Core.Domain.Enums;
@@ -11,18 +12,21 @@ public sealed class PermissionAuthorizationService : IAuthorizationService
 {
     private readonly IUserContext _userContext;
     private readonly ITenantContext _tenantContext;
+    private readonly IMetricsCollector _metrics;
 
     /// <summary>
     /// Initializes the authorization service.
     /// </summary>
     public PermissionAuthorizationService(
         IUserContext userContext,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        IMetricsCollector? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(userContext);
         ArgumentNullException.ThrowIfNull(tenantContext);
         _userContext = userContext;
         _tenantContext = tenantContext;
+        _metrics = metrics ?? NullMetricsCollector.Instance;
     }
 
     /// <inheritdoc />
@@ -38,12 +42,12 @@ public sealed class PermissionAuthorizationService : IAuthorizationService
         if (!context.IsAuthenticated ||
             !context.Permissions.Contains(request.Permission))
         {
-            return Task.FromResult(AuthorizationDecision.Deny);
+            return Task.FromResult(RecordDecision(AuthorizationDecision.Deny));
         }
 
         if (request.OwnerTenantId is not { } ownerTenantId)
         {
-            return Task.FromResult(AuthorizationDecision.Allow);
+            return Task.FromResult(RecordDecision(AuthorizationDecision.Allow));
         }
 
         var requestTenantId = _tenantContext.TenantId;
@@ -56,12 +60,12 @@ public sealed class PermissionAuthorizationService : IAuthorizationService
 
         if (!securityTenantMatchesRequest)
         {
-            return Task.FromResult(AuthorizationDecision.Deny);
+            return Task.FromResult(RecordDecision(AuthorizationDecision.Deny));
         }
 
         if (requestTenantId == ownerTenantId)
         {
-            return Task.FromResult(AuthorizationDecision.Allow);
+            return Task.FromResult(RecordDecision(AuthorizationDecision.Allow));
         }
 
         var sharingAllowsTenant =
@@ -75,9 +79,18 @@ public sealed class PermissionAuthorizationService : IAuthorizationService
             sharing.Visibility == WorkflowVisibility.Shared &&
             sharing.SharedTenantIds.Contains(requestTenantId!.Value);
 
-        return Task.FromResult(
+        return Task.FromResult(RecordDecision(
             sharingAllowsTenant
                 ? AuthorizationDecision.Allow
-                : AuthorizationDecision.Deny);
+                : AuthorizationDecision.Deny));
+    }
+
+    private AuthorizationDecision RecordDecision(AuthorizationDecision decision)
+    {
+        _metrics.IncrementCounter(
+            decision.IsAllowed
+                ? OperationalMetricNames.AuthorizationAllowed
+                : OperationalMetricNames.AuthorizationDenied);
+        return decision;
     }
 }

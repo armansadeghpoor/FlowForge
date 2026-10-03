@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FlowForge.Abstractions.Auditing;
+using FlowForge.Abstractions.Observability;
 using FlowForge.Core.Domain.Auditing;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Identifiers;
@@ -8,7 +9,8 @@ namespace FlowForge.Application.Auditing;
 
 internal sealed class ApplicationAuditRecorder(
     IAuditStore auditStore,
-    IAuditContext auditContext)
+    IAuditContext auditContext,
+    IMetricsCollector metrics)
 {
     public async Task TryRecordAsync(
         string action,
@@ -46,8 +48,12 @@ internal sealed class ApplicationAuditRecorder(
         }
         catch (Exception)
         {
+            metrics.IncrementCounter(OperationalMetricNames.AuditEventsFailed);
             // Audit provider failures must not replace the use-case authorization or result.
+            return;
         }
+
+        metrics.IncrementCounter(OperationalMetricNames.AuditEventsRecorded);
     }
 }
 

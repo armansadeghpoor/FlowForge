@@ -7,6 +7,7 @@ using FlowForge.Api.Observability;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace FlowForge.Api.Tests.Observability;
 
@@ -70,6 +71,7 @@ public sealed class OperationalObservabilityTests
         var snapshot = metrics.GetSnapshot();
         Assert.Equal(1, snapshot.Counters[RequestLoggingMiddleware.RequestCountMetric]);
         Assert.Equal(1, snapshot.Counters["http.server.responses.202"]);
+        Assert.Equal(1, snapshot.Counters["http.server.responses.2xx"]);
         Assert.Equal(
             1,
             snapshot.Durations[RequestLoggingMiddleware.RequestDurationMetric].Count);
@@ -106,6 +108,11 @@ public sealed class OperationalObservabilityTests
         Assert.Equal(
             TimeSpan.FromMilliseconds(25),
             response.Metrics.Durations[RequestLoggingMiddleware.RequestDurationMetric].Average);
+
+        var serialized = JsonSerializer.Serialize(response);
+        Assert.DoesNotContain("ConnectionString", serialized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization", serialized, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("request body", serialized, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class MutableTimeProvider(DateTimeOffset current) : TimeProvider

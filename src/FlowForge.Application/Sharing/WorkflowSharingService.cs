@@ -1,5 +1,6 @@
 using FlowForge.Abstractions.Auditing;
 using FlowForge.Abstractions.Definitions;
+using FlowForge.Abstractions.Observability;
 using FlowForge.Abstractions.Security;
 using FlowForge.Abstractions.Sharing;
 using FlowForge.Application.Auditing;
@@ -26,17 +27,19 @@ public sealed class WorkflowSharingService : IWorkflowSharingService
         IWorkflowSharingStore sharingStore,
         IAuthorizationService authorizationService,
         IAuditStore auditStore,
-        IAuditContext auditContext)
+        IAuditContext auditContext,
+        IMetricsCollector? metrics = null)
     {
         ArgumentNullException.ThrowIfNull(definitionStore);
         ArgumentNullException.ThrowIfNull(sharingStore);
         ArgumentNullException.ThrowIfNull(authorizationService);
         ArgumentNullException.ThrowIfNull(auditStore);
         ArgumentNullException.ThrowIfNull(auditContext);
+        metrics ??= NullMetricsCollector.Instance;
         _definitionStore = definitionStore;
         _sharingStore = sharingStore;
         _authorizationService = authorizationService;
-        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext);
+        _auditRecorder = new ApplicationAuditRecorder(auditStore, auditContext, metrics);
     }
 
     /// <inheritdoc />
