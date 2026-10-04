@@ -96,14 +96,23 @@ flow. A policy timeout is a normal failed `NodeExecutionResult`; caller
 cancellation remains exceptional control flow and must be rethrown only after
 durable cancellation finalization.
 
-Phase 14.1 defines this semantic contract and adds the cancellation history
-event vocabulary. Exception containment and node finalization are deferred to
-Phase 14.2, concurrent-layer and workflow finalization to Phase 14.3, and
-atomic snapshot/history transitions to Phase 14.4. Until those phases are
-implemented, the current executor can still leave a running snapshot after a
-caller cancellation or unexpected node/middleware exception. Persistence
-failures already remain unclassified infrastructure failures and must continue
-to do so throughout that work.
+Phase 14.1 defined this semantic contract and added the cancellation history
+event vocabulary. Phase 14.2 introduces an Engine-internal node execution
+coordinator around the existing pipeline. The coordinator converts unexpected
+node, middleware, and pipeline exceptions into a safe failed result with
+`NodeFailureCategory.Execution`. That result follows the existing terminal
+node snapshot and `NodeFailed` history path; exception messages and stack
+traces are not persisted.
+
+Caller cancellation bypasses execution-failure classification and continues
+to propagate as `OperationCanceledException`. Persistence before, during, or
+after execution is also kept outside node-failure classification: an internal
+marker identifies attempt-state persistence performed from the pipeline
+delegate, and the original persistence exception is rethrown by the
+coordinator. Workflow cancellation and concurrent-layer finalization remain
+deferred to Phase 14.3. Atomic snapshot/history transitions remain deferred to
+Phase 14.4, so a persistence failure can still leave a partially applied
+transition.
 
 ## Trigger Runtime Architecture
 

@@ -6,7 +6,9 @@ using FlowForge.Abstractions.Nodes;
 using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
+using FlowForge.Core.Domain.Executions;
 using FlowForge.Core.Domain.Failures;
+using FlowForge.Core.Domain.History;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Engine.Execution;
 using FlowForge.Engine.Policies;
@@ -403,7 +405,7 @@ public sealed class WorkflowExecutorTests
         var expected = new TestPersistenceException();
         var runnerInvoked = false;
         var engine = CreateEngine(
-            new ThrowingCreateStateStore(expected),
+            new FaultInjectingStateStore(createExecutionException: expected),
             new FakeNodeRunner(
                 "test",
                 (_, _) =>
@@ -417,6 +419,170 @@ public sealed class WorkflowExecutorTests
 
         Assert.Same(expected, actual);
         Assert.False(runnerInvoked);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NodeRunnerThrows_PersistsSafeExecutionFailure()
+    {
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(
+            stateStore,
+            new FakeNodeRunner(
+                "test",
+                (_, _) => Task.FromException<NodeExecutionResult>(
+                    new InvalidOperationException("secret-token-value"))));
+
+        var execution = await engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            CancellationToken.None);
+        var stored = await stateStore.GetExecutionAsync(
+            execution.Id,
+            CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
+        var node = Assert.Single(execution.Nodes);
+        Assert.Equal(NodeExecutionStatus.Failed, node.Status);
+        Assert.NotNull(node.CompletedAt);
+        Assert.Equal(NodeFailureCategory.Execution, node.Failure?.Category);
+        Assert.Equal(
+            "Node execution failed because of an unexpected execution error.",
+            node.Failure?.Message);
+        Assert.DoesNotContain("secret-token-value", node.Failure?.Message);
+        Assert.NotNull(stored);
+        Assert.Equal(node, Assert.Single(stored.Nodes));
+        Assert.Contains(
+            history,
+            entry => entry.EventType == ExecutionHistoryEventType.NodeFailed &&
+                     entry.NodeExecutionId == node.Id);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MiddlewareThrows_PersistsSafeExecutionFailure()
+    {
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(
+            stateStore,
+            [new ThrowingMiddleware(new InvalidOperationException("sensitive-detail"))],
+            new FakeNodeRunner("test", (_, _) => Task.FromResult(Succeeded())));
+
+        var execution = await engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            CancellationToken.None);
+        var stored = await stateStore.GetExecutionAsync(
+            execution.Id,
+            CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        var node = Assert.Single(execution.Nodes);
+        Assert.Equal(NodeExecutionStatus.Failed, node.Status);
+        Assert.NotNull(node.CompletedAt);
+        Assert.Equal(NodeFailureCategory.Execution, node.Failure?.Category);
+        Assert.DoesNotContain("sensitive-detail", node.Failure?.Message);
+        Assert.NotNull(stored);
+        Assert.Equal(node, Assert.Single(stored.Nodes));
+        Assert.Contains(
+            history,
+            entry => entry.EventType == ExecutionHistoryEventType.NodeFailed &&
+                     entry.NodeExecutionId == node.Id);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CallerCancellation_PropagatesWithoutExecutionClassification()
+    {
+        var executionStarted = new TaskCompletionSource<NodeExecutionContext>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var stateStore = new InMemoryStateStore();
+        using var cancellationSource = new CancellationTokenSource();
+        var engine = CreateEngine(
+            stateStore,
+            new FakeNodeRunner(
+                "test",
+                async (context, cancellationToken) =>
+                {
+                    executionStarted.TrySetResult(context);
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return Succeeded();
+                }));
+
+        var executionTask = engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            cancellationSource.Token);
+        var context = await executionStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancellationSource.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => executionTask);
+        var storedNode = await stateStore.GetNodeExecutionAsync(
+            context.WorkflowExecutionId,
+            context.NodeExecutionId,
+            CancellationToken.None);
+        Assert.NotNull(storedNode);
+        Assert.NotEqual(NodeFailureCategory.Execution, storedNode.Failure?.Category);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PersistenceFailureWhileFinalizing_PropagatesUnchanged()
+    {
+        var expected = new TestPersistenceException();
+        var contextSource = new TaskCompletionSource<NodeExecutionContext>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var stateStore = new FaultInjectingStateStore(
+            saveNodeException: node =>
+                node.Status == NodeExecutionStatus.Failed ? expected : null);
+        var engine = CreateEngine(
+            stateStore,
+            new FakeNodeRunner(
+                "test",
+                (context, _) =>
+                {
+                    contextSource.TrySetResult(context);
+                    return Task.FromException<NodeExecutionResult>(
+                        new InvalidOperationException("Execution failed."));
+                }));
+
+        var actual = await Assert.ThrowsAsync<TestPersistenceException>(() =>
+            engine.ExecuteAsync(Workflow([Node(1)]), CancellationToken.None));
+        var context = await contextSource.Task;
+        var storedNode = await stateStore.GetNodeExecutionAsync(
+            context.WorkflowExecutionId,
+            context.NodeExecutionId,
+            CancellationToken.None);
+
+        Assert.Same(expected, actual);
+        Assert.NotNull(storedNode);
+        Assert.Equal(NodeExecutionStatus.Running, storedNode.Status);
+        Assert.Null(storedNode.Failure);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AttemptPersistenceFailure_PropagatesUnchanged()
+    {
+        var expected = new TestPersistenceException();
+        var attempts = 0;
+        var stateStore = new FaultInjectingStateStore(
+            saveNodeException: node =>
+                node.Status == NodeExecutionStatus.Running && node.AttemptNumber == 2
+                    ? expected
+                    : null);
+        var engine = CreateEngine(
+            stateStore,
+            [new RetryNodeExecutionPolicy(2, TimeSpan.Zero)],
+            new FakeNodeRunner(
+                "test",
+                (_, _) => Task.FromResult(
+                    ++attempts == 1
+                        ? Failed("External failure.", NodeFailureCategory.External)
+                        : Succeeded())));
+
+        var actual = await Assert.ThrowsAsync<TestPersistenceException>(() =>
+            engine.ExecuteAsync(Workflow([Node(1)]), CancellationToken.None));
+
+        Assert.Same(expected, actual);
+        Assert.Equal(1, attempts);
     }
 
     private static WorkflowEngine CreateEngine(
@@ -519,12 +685,27 @@ public sealed class WorkflowExecutorTests
             execute(context, cancellationToken);
     }
 
-    private sealed class ThrowingCreateStateStore(Exception exception) : IStateStore
+    private sealed class ThrowingMiddleware(Exception exception) : IExecutionMiddleware
     {
-        public Task CreateExecutionAsync(
-            FlowForge.Core.Domain.Executions.WorkflowExecution execution,
+        public Task<NodeExecutionResult> ExecuteAsync(
+            NodeExecutionContext context,
+            Func<NodeExecutionContext, CancellationToken, Task<NodeExecutionResult>> next,
             CancellationToken cancellationToken) =>
-            Task.FromException(exception);
+            Task.FromException<NodeExecutionResult>(exception);
+    }
+
+    private sealed class FaultInjectingStateStore(
+        Exception? createExecutionException = null,
+        Func<NodeExecutionState, Exception?>? saveNodeException = null) : IStateStore
+    {
+        private readonly InMemoryStateStore _inner = new();
+
+        public Task CreateExecutionAsync(
+            WorkflowExecution execution,
+            CancellationToken cancellationToken) =>
+            createExecutionException is null
+                ? _inner.CreateExecutionAsync(execution, cancellationToken)
+                : Task.FromException(createExecutionException);
 
         public Task UpdateWorkflowStatusAsync(
             WorkflowExecutionId id,
@@ -532,59 +713,72 @@ public sealed class WorkflowExecutorTests
             DateTime? startedAt,
             DateTime? completedAt,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.UpdateWorkflowStatusAsync(
+                id,
+                status,
+                startedAt,
+                completedAt,
+                cancellationToken);
 
         public Task UpdateHeartbeatAsync(
             WorkflowExecutionId id,
             DateTime lastHeartbeatAt,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.UpdateHeartbeatAsync(id, lastHeartbeatAt, cancellationToken);
 
-        public Task<IReadOnlyList<FlowForge.Core.Domain.Executions.WorkflowExecution>>
+        public Task<IReadOnlyList<WorkflowExecution>>
             FindStaleExecutionsAsync(
                 DateTime threshold,
                 CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.FindStaleExecutionsAsync(threshold, cancellationToken);
 
         public Task<bool> TryClaimExecutionAsync(
             WorkflowExecutionId id,
             string ownerId,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.TryClaimExecutionAsync(id, ownerId, cancellationToken);
 
         public Task AppendExecutionHistoryAsync(
-            FlowForge.Core.Domain.History.ExecutionHistoryEntry entry,
+            ExecutionHistoryEntry entry,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.AppendExecutionHistoryAsync(entry, cancellationToken);
 
-        public Task<IReadOnlyList<FlowForge.Core.Domain.History.ExecutionHistoryEntry>>
+        public Task<IReadOnlyList<ExecutionHistoryEntry>>
             GetExecutionHistoryAsync(
                 WorkflowExecutionId executionId,
                 CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.GetExecutionHistoryAsync(executionId, cancellationToken);
 
         public Task SaveNodeExecutionAsync(
             WorkflowExecutionId executionId,
-            FlowForge.Core.Domain.Executions.NodeExecutionState nodeExecution,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            NodeExecutionState nodeExecution,
+            CancellationToken cancellationToken)
+        {
+            var exception = saveNodeException?.Invoke(nodeExecution);
+            return exception is null
+                ? _inner.SaveNodeExecutionAsync(
+                    executionId,
+                    nodeExecution,
+                    cancellationToken)
+                : Task.FromException(exception);
+        }
 
-        public Task<FlowForge.Core.Domain.Executions.WorkflowExecution?> GetExecutionAsync(
+        public Task<WorkflowExecution?> GetExecutionAsync(
             WorkflowExecutionId id,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.GetExecutionAsync(id, cancellationToken);
 
-        public Task<IReadOnlyList<FlowForge.Core.Domain.Executions.WorkflowExecution>>
+        public Task<IReadOnlyList<WorkflowExecution>>
             FindExecutionsByCorrelationIdAsync(
                 ExecutionCorrelationId correlationId,
                 CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.FindExecutionsByCorrelationIdAsync(correlationId, cancellationToken);
 
-        public Task<FlowForge.Core.Domain.Executions.NodeExecutionState?> GetNodeExecutionAsync(
+        public Task<NodeExecutionState?> GetNodeExecutionAsync(
             WorkflowExecutionId executionId,
             NodeExecutionId nodeExecutionId,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            _inner.GetNodeExecutionAsync(executionId, nodeExecutionId, cancellationToken);
     }
 
     private sealed class TestPersistenceException : Exception;

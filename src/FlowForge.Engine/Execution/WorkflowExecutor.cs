@@ -22,7 +22,7 @@ public sealed class WorkflowExecutor
 {
     private readonly INodeRunnerRegistry _nodeRunnerRegistry;
     private readonly IStateStore _stateStore;
-    private readonly ExecutionPipeline _executionPipeline;
+    private readonly NodeExecutionCoordinator _nodeExecutionCoordinator;
     private readonly IMetricsCollector _metrics;
 
     /// <summary>
@@ -43,7 +43,7 @@ public sealed class WorkflowExecutor
         ArgumentNullException.ThrowIfNull(executionPipeline);
         _nodeRunnerRegistry = nodeRunnerRegistry;
         _stateStore = stateStore;
-        _executionPipeline = executionPipeline;
+        _nodeExecutionCoordinator = new NodeExecutionCoordinator(executionPipeline);
         _metrics = metrics ?? NullMetricsCollector.Instance;
     }
 
@@ -210,7 +210,7 @@ public sealed class WorkflowExecutor
             return failedNodeExecution;
         }
 
-        var result = await _executionPipeline.ExecuteAsync(
+        var result = await _nodeExecutionCoordinator.ExecuteAsync(
             context,
             async (currentContext, token) =>
             {
@@ -221,7 +221,7 @@ public sealed class WorkflowExecutor
                         AttemptNumber = currentContext.AttemptNumber,
                         RetryCount = currentContext.AttemptNumber - 1
                     };
-                    await _stateStore.SaveNodeExecutionAsync(executionId, nodeExecution, token);
+                    await SaveNodeAttemptAsync(executionId, nodeExecution, token);
                 }
 
                 return await runner.ExecuteAsync(currentContext, token);
@@ -253,6 +253,24 @@ public sealed class WorkflowExecutor
             cancellationToken);
 
         return completedNodeExecution;
+    }
+
+    private async Task SaveNodeAttemptAsync(
+        WorkflowExecutionId executionId,
+        NodeExecutionState nodeExecution,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _stateStore.SaveNodeExecutionAsync(
+                executionId,
+                nodeExecution,
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new NodeExecutionPersistenceException(exception);
+        }
     }
 
     private async Task<WorkflowExecution> CompleteAsync(
