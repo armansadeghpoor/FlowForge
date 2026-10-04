@@ -109,10 +109,30 @@ to propagate as `OperationCanceledException`. Persistence before, during, or
 after execution is also kept outside node-failure classification: an internal
 marker identifies attempt-state persistence performed from the pipeline
 delegate, and the original persistence exception is rethrown by the
-coordinator. Workflow cancellation and concurrent-layer finalization remain
-deferred to Phase 14.3. Atomic snapshot/history transitions remain deferred to
-Phase 14.4, so a persistence failure can still leave a partially applied
-transition.
+coordinator.
+
+Concurrent layers preserve the existing `Task.WhenAll` model. Every node in a
+started layer is observed before the layer result is evaluated. A returned or
+coordinated node failure does not cancel its siblings: already-terminal sibling
+states are preserved, running siblings finish normally, and later graph layers
+do not begin. Multiple failures are retained on their individual node states in
+deterministic layer order. `WorkflowExecution` has no single workflow-failure
+payload, so workflow aggregation records the terminal `Failed` status and
+`WorkflowFailed` history event without selecting or discarding one node
+failure as primary.
+
+Caller cancellation has precedence while execution is active. Each started,
+still-running node is persisted as `Cancelled` with a cancelled failure and a
+`NodeCancelled` history event. Siblings that already reached `Succeeded` or
+`Failed` remain unchanged. After all started layer tasks have been observed,
+the workflow is persisted as `Cancelled`, `WorkflowCancelled` is appended, and
+the original `OperationCanceledException` is rethrown. Cancellation
+finalization uses a token independent from the already-cancelled caller token.
+
+Persistence failures remain outside execution classification and propagate to
+the caller, including failures during cancellation finalization. Atomic
+snapshot/history transitions remain deferred to Phase 14.4, so a persistence
+failure can still leave a partially applied node or workflow transition.
 
 ## Trigger Runtime Architecture
 

@@ -298,6 +298,147 @@ public sealed class WorkflowExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_LayerFailure_WaitsForRunningSiblingAndPreservesBothResults()
+    {
+        var failedNode = Node(1);
+        var siblingNode = Node(2);
+        var laterNode = Node(3);
+        var siblingStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var failureReturned = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSibling = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var laterNodeInvocations = 0;
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
+            "test",
+            async (context, cancellationToken) =>
+            {
+                if (context.NodeDefinition.Id == failedNode.Id)
+                {
+                    await siblingStarted.Task.WaitAsync(cancellationToken);
+                    failureReturned.TrySetResult();
+                    return Failed("Layer failure.", NodeFailureCategory.External);
+                }
+
+                if (context.NodeDefinition.Id == siblingNode.Id)
+                {
+                    siblingStarted.TrySetResult();
+                    await releaseSibling.Task.WaitAsync(cancellationToken);
+                    return Succeeded();
+                }
+
+                Interlocked.Increment(ref laterNodeInvocations);
+                return Succeeded();
+            }));
+        var workflow = Workflow(
+            [failedNode, siblingNode, laterNode],
+            Edge(failedNode, laterNode),
+            Edge(siblingNode, laterNode));
+
+        var executionTask = engine.ExecuteAsync(workflow, CancellationToken.None);
+
+        try
+        {
+            await failureReturned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(executionTask.IsCompleted);
+        }
+        finally
+        {
+            releaseSibling.TrySetResult();
+        }
+
+        var execution = await executionTask;
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
+        Assert.Equal([failedNode.Id, siblingNode.Id], execution.Nodes.Select(node => node.NodeId));
+        Assert.Equal(
+            NodeExecutionStatus.Failed,
+            execution.Nodes.Single(node => node.NodeId == failedNode.Id).Status);
+        Assert.Equal(
+            NodeExecutionStatus.Succeeded,
+            execution.Nodes.Single(node => node.NodeId == siblingNode.Id).Status);
+        Assert.Equal(0, laterNodeInvocations);
+        Assert.Equal(ExecutionHistoryEventType.WorkflowFailed, history[^1].EventType);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MultipleLayerFailures_PreservesEveryNodeFailure()
+    {
+        var firstNode = Node(1);
+        var secondNode = Node(2);
+        var laterNode = Node(3);
+        var laterNodeInvocations = 0;
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
+            "test",
+            (context, _) =>
+            {
+                if (context.NodeDefinition.Id == laterNode.Id)
+                {
+                    Interlocked.Increment(ref laterNodeInvocations);
+                    return Task.FromResult(Succeeded());
+                }
+
+                return Task.FromResult(
+                    context.NodeDefinition.Id == firstNode.Id
+                        ? Failed("First failure.", NodeFailureCategory.External)
+                        : Failed("Second failure.", NodeFailureCategory.Validation));
+            }));
+        var workflow = Workflow(
+            [firstNode, secondNode, laterNode],
+            Edge(firstNode, laterNode),
+            Edge(secondNode, laterNode));
+
+        var execution = await engine.ExecuteAsync(workflow, CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
+        Assert.Equal([firstNode.Id, secondNode.Id], execution.Nodes.Select(node => node.NodeId));
+        Assert.Equal(
+            (NodeFailureCategory.External, "First failure."),
+            (execution.Nodes[0].Failure?.Category, execution.Nodes[0].Failure?.Message));
+        Assert.Equal(
+            (NodeFailureCategory.Validation, "Second failure."),
+            (execution.Nodes[1].Failure?.Category, execution.Nodes[1].Failure?.Message));
+        Assert.Equal(
+            2,
+            history.Count(entry => entry.EventType == ExecutionHistoryEventType.NodeFailed));
+        Assert.Equal(0, laterNodeInvocations);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnexpectedSiblingException_PreservesSuccessfulSibling()
+    {
+        var throwingNode = Node(1);
+        var successfulNode = Node(2);
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
+            "test",
+            (context, _) =>
+                context.NodeDefinition.Id == throwingNode.Id
+                    ? Task.FromException<NodeExecutionResult>(
+                        new InvalidOperationException("Unexpected node exception."))
+                    : Task.FromResult(Succeeded())));
+
+        var execution = await engine.ExecuteAsync(
+            Workflow([throwingNode, successfulNode]),
+            CancellationToken.None);
+
+        Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
+        Assert.Equal([throwingNode.Id, successfulNode.Id], execution.Nodes.Select(node => node.NodeId));
+        Assert.Equal(NodeExecutionStatus.Failed, execution.Nodes[0].Status);
+        Assert.Equal(NodeFailureCategory.Execution, execution.Nodes[0].Failure?.Category);
+        Assert.Equal(NodeExecutionStatus.Succeeded, execution.Nodes[1].Status);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_RetryPolicy_FirstFailureThenSuccess_SucceedsWorkflow()
     {
         var attempts = 0;
@@ -520,8 +661,112 @@ public sealed class WorkflowExecutorTests
             context.WorkflowExecutionId,
             context.NodeExecutionId,
             CancellationToken.None);
+        var storedExecution = await stateStore.GetExecutionAsync(
+            context.WorkflowExecutionId,
+            CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            context.WorkflowExecutionId,
+            CancellationToken.None);
+
         Assert.NotNull(storedNode);
-        Assert.NotEqual(NodeFailureCategory.Execution, storedNode.Failure?.Category);
+        Assert.Equal(NodeExecutionStatus.Cancelled, storedNode.Status);
+        Assert.NotNull(storedNode.CompletedAt);
+        Assert.Equal(NodeFailureCategory.Cancelled, storedNode.Failure?.Category);
+        Assert.NotNull(storedExecution);
+        Assert.Equal(WorkflowExecutionStatus.Cancelled, storedExecution.Status);
+        Assert.NotNull(storedExecution.CompletedAt);
+        Assert.Contains(
+            history,
+            entry => entry.EventType == ExecutionHistoryEventType.NodeCancelled &&
+                     entry.NodeExecutionId == context.NodeExecutionId);
+        Assert.Equal(ExecutionHistoryEventType.WorkflowCancelled, history[^1].EventType);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ConcurrentCallerCancellation_CancelsEveryRunningNodeAndWorkflow()
+    {
+        var firstNode = Node(1);
+        var secondNode = Node(2);
+        var contexts = new ConcurrentQueue<NodeExecutionContext>();
+        var allNodesStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var startedNodeCount = 0;
+        var stateStore = new InMemoryStateStore();
+        using var cancellationSource = new CancellationTokenSource();
+        var engine = CreateEngine(stateStore, new FakeNodeRunner(
+            "test",
+            async (context, cancellationToken) =>
+            {
+                contexts.Enqueue(context);
+                if (Interlocked.Increment(ref startedNodeCount) == 2)
+                {
+                    allNodesStarted.TrySetResult();
+                }
+
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return Succeeded();
+            }));
+
+        var executionTask = engine.ExecuteAsync(
+            Workflow([firstNode, secondNode]),
+            cancellationSource.Token);
+        await allNodesStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancellationSource.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => executionTask);
+        var executionId = contexts.First().WorkflowExecutionId;
+        var storedExecution = await stateStore.GetExecutionAsync(
+            executionId,
+            CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            executionId,
+            CancellationToken.None);
+
+        Assert.NotNull(storedExecution);
+        Assert.Equal(WorkflowExecutionStatus.Cancelled, storedExecution.Status);
+        Assert.Equal(2, storedExecution.Nodes.Count);
+        Assert.All(storedExecution.Nodes, node =>
+        {
+            Assert.Equal(NodeExecutionStatus.Cancelled, node.Status);
+            Assert.Equal(NodeFailureCategory.Cancelled, node.Failure?.Category);
+            Assert.NotNull(node.CompletedAt);
+        });
+        Assert.Equal(
+            2,
+            history.Count(entry => entry.EventType == ExecutionHistoryEventType.NodeCancelled));
+        Assert.Equal(ExecutionHistoryEventType.WorkflowCancelled, history[^1].EventType);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CancellationFinalizationPersistenceFailure_PropagatesUnchanged()
+    {
+        var expected = new TestPersistenceException();
+        var executionStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var stateStore = new FaultInjectingStateStore(
+            updateWorkflowException: status =>
+                status == WorkflowExecutionStatus.Cancelled ? expected : null);
+        using var cancellationSource = new CancellationTokenSource();
+        var engine = CreateEngine(
+            stateStore,
+            new FakeNodeRunner(
+                "test",
+                async (_, cancellationToken) =>
+                {
+                    executionStarted.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return Succeeded();
+                }));
+
+        var executionTask = engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            cancellationSource.Token);
+        await executionStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancellationSource.CancelAsync();
+
+        var actual = await Assert.ThrowsAsync<TestPersistenceException>(() => executionTask);
+
+        Assert.Same(expected, actual);
     }
 
     [Fact]
@@ -696,7 +941,8 @@ public sealed class WorkflowExecutorTests
 
     private sealed class FaultInjectingStateStore(
         Exception? createExecutionException = null,
-        Func<NodeExecutionState, Exception?>? saveNodeException = null) : IStateStore
+        Func<NodeExecutionState, Exception?>? saveNodeException = null,
+        Func<WorkflowExecutionStatus, Exception?>? updateWorkflowException = null) : IStateStore
     {
         private readonly InMemoryStateStore _inner = new();
 
@@ -712,13 +958,18 @@ public sealed class WorkflowExecutorTests
             WorkflowExecutionStatus status,
             DateTime? startedAt,
             DateTime? completedAt,
-            CancellationToken cancellationToken) =>
-            _inner.UpdateWorkflowStatusAsync(
-                id,
-                status,
-                startedAt,
-                completedAt,
-                cancellationToken);
+            CancellationToken cancellationToken)
+        {
+            var exception = updateWorkflowException?.Invoke(status);
+            return exception is null
+                ? _inner.UpdateWorkflowStatusAsync(
+                    id,
+                    status,
+                    startedAt,
+                    completedAt,
+                    cancellationToken)
+                : Task.FromException(exception);
+        }
 
         public Task UpdateHeartbeatAsync(
             WorkflowExecutionId id,
