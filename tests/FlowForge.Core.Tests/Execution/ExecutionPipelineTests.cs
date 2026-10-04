@@ -114,6 +114,35 @@ public sealed class ExecutionPipelineTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_TerminalExecutionException_PropagatesUnchanged()
+    {
+        var expected = new InvalidOperationException("Node execution failed unexpectedly.");
+        var pipeline = new ExecutionPipeline([]);
+
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            pipeline.ExecuteAsync(
+                TestNodeExecutionContext.Create(),
+                (_, _) => Task.FromException<NodeExecutionResult>(expected),
+                CancellationToken.None));
+
+        Assert.Same(expected, actual);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CallerCancellation_PropagatesCancellation()
+    {
+        using var cancellationSource = new CancellationTokenSource();
+        await cancellationSource.CancelAsync();
+        var pipeline = new ExecutionPipeline([]);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            pipeline.ExecuteAsync(
+                TestNodeExecutionContext.Create(),
+                (_, token) => Task.FromCanceled<NodeExecutionResult>(token),
+                cancellationSource.Token));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_MiddlewarePassesUpdatedContextToNextAndTerminal()
     {
         var original = TestNodeExecutionContext.Create();

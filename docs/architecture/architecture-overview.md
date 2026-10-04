@@ -72,6 +72,39 @@ does not select concrete storage providers.
 Execution history is append-only audit information. The current execution
 snapshot remains the authoritative state; FlowForge is not event sourced.
 
+### Execution outcome semantics
+
+The execution lifecycle distinguishes node results, caller cancellation,
+execution exceptions, and persistence failures:
+
+| Outcome | Node terminal state | Workflow behavior |
+| --- | --- | --- |
+| Successful `NodeExecutionResult` | `Succeeded` | Execution may continue to the next dependency layer. |
+| Failed `NodeExecutionResult` | `Failed` | The supplied `NodeFailure` category is preserved and later layers do not begin. |
+| Policy timeout | `Failed` | Timeout remains a failed node result with `NodeFailureCategory.Cancelled`; it is not caller cancellation. |
+| Caller cancellation | `Cancelled` | Started node and workflow executions are finalized as cancelled where persistence remains available, cancellation history is recorded, and `OperationCanceledException` is rethrown. |
+| Unexpected node or middleware exception | `Failed` | The node failure is classified as `NodeFailureCategory.Execution`; it is not converted to cancellation. |
+| Persistence failure | Not reclassified | The infrastructure failure propagates and is never represented as a node failure. |
+
+`Succeeded`, `Failed`, and `Cancelled` are terminal workflow and node states.
+`Pending` and `Running` remain non-terminal states already present in the
+domain model. `WorkflowCancelled` and `NodeCancelled` are the corresponding
+append-only history events.
+
+Policy timeout and caller cancellation intentionally have different control
+flow. A policy timeout is a normal failed `NodeExecutionResult`; caller
+cancellation remains exceptional control flow and must be rethrown only after
+durable cancellation finalization.
+
+Phase 14.1 defines this semantic contract and adds the cancellation history
+event vocabulary. Exception containment and node finalization are deferred to
+Phase 14.2, concurrent-layer and workflow finalization to Phase 14.3, and
+atomic snapshot/history transitions to Phase 14.4. Until those phases are
+implemented, the current executor can still leave a running snapshot after a
+caller cancellation or unexpected node/middleware exception. Persistence
+failures already remain unclassified infrastructure failures and must continue
+to do so throughout that work.
+
 ## Trigger Runtime Architecture
 
 All trigger paths converge on the existing workflow engine rather than

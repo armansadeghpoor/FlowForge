@@ -3,6 +3,7 @@ using System.Text.Json;
 using FlowForge.Abstractions.Execution;
 using FlowForge.Abstractions.Engine;
 using FlowForge.Abstractions.Nodes;
+using FlowForge.Abstractions.State;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Enums;
 using FlowForge.Core.Domain.Failures;
@@ -363,8 +364,63 @@ public sealed class WorkflowExecutorTests
         Assert.Equal("Failure 3.", node.Failure?.Message);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_PolicyTimeout_PreservesCancelledFailureAndFailsExecution()
+    {
+        var stateStore = new InMemoryStateStore();
+        var engine = CreateEngine(
+            stateStore,
+            [new TimeoutNodeExecutionPolicy(TimeSpan.FromMilliseconds(20))],
+            new FakeNodeRunner(
+                "test",
+                async (_, cancellationToken) =>
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    return Succeeded();
+                }));
+
+        var execution = await engine.ExecuteAsync(
+            Workflow([Node(1)]),
+            CancellationToken.None);
+        var history = await stateStore.GetExecutionHistoryAsync(
+            execution.Id,
+            CancellationToken.None);
+
+        var node = Assert.Single(execution.Nodes);
+        Assert.Equal(WorkflowExecutionStatus.Failed, execution.Status);
+        Assert.Equal(NodeExecutionStatus.Failed, node.Status);
+        Assert.Equal(NodeFailureCategory.Cancelled, node.Failure?.Category);
+        Assert.Contains("timed out", node.Failure?.Message);
+        Assert.Contains(
+            history,
+            entry => entry.EventType == ExecutionHistoryEventType.NodeFailed);
+        Assert.Equal(ExecutionHistoryEventType.WorkflowFailed, history[^1].EventType);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PersistenceFailure_PropagatesUnchanged()
+    {
+        var expected = new TestPersistenceException();
+        var runnerInvoked = false;
+        var engine = CreateEngine(
+            new ThrowingCreateStateStore(expected),
+            new FakeNodeRunner(
+                "test",
+                (_, _) =>
+                {
+                    runnerInvoked = true;
+                    return Task.FromResult(Succeeded());
+                }));
+
+        var actual = await Assert.ThrowsAsync<TestPersistenceException>(() =>
+            engine.ExecuteAsync(Workflow([Node(1)]), CancellationToken.None));
+
+        Assert.Same(expected, actual);
+        Assert.False(runnerInvoked);
+    }
+
     private static WorkflowEngine CreateEngine(
-        InMemoryStateStore stateStore,
+        IStateStore stateStore,
         params INodeRunner[] runners) =>
         CreateEngine(
             stateStore,
@@ -372,7 +428,7 @@ public sealed class WorkflowExecutorTests
             runners);
 
     private static WorkflowEngine CreateEngine(
-        InMemoryStateStore stateStore,
+        IStateStore stateStore,
         IEnumerable<IExecutionMiddleware> middlewares,
         params INodeRunner[] runners) =>
         new(new WorkflowExecutor(
@@ -462,4 +518,74 @@ public sealed class WorkflowExecutorTests
             CancellationToken cancellationToken) =>
             execute(context, cancellationToken);
     }
+
+    private sealed class ThrowingCreateStateStore(Exception exception) : IStateStore
+    {
+        public Task CreateExecutionAsync(
+            FlowForge.Core.Domain.Executions.WorkflowExecution execution,
+            CancellationToken cancellationToken) =>
+            Task.FromException(exception);
+
+        public Task UpdateWorkflowStatusAsync(
+            WorkflowExecutionId id,
+            WorkflowExecutionStatus status,
+            DateTime? startedAt,
+            DateTime? completedAt,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task UpdateHeartbeatAsync(
+            WorkflowExecutionId id,
+            DateTime lastHeartbeatAt,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FlowForge.Core.Domain.Executions.WorkflowExecution>>
+            FindStaleExecutionsAsync(
+                DateTime threshold,
+                CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> TryClaimExecutionAsync(
+            WorkflowExecutionId id,
+            string ownerId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task AppendExecutionHistoryAsync(
+            FlowForge.Core.Domain.History.ExecutionHistoryEntry entry,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FlowForge.Core.Domain.History.ExecutionHistoryEntry>>
+            GetExecutionHistoryAsync(
+                WorkflowExecutionId executionId,
+                CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SaveNodeExecutionAsync(
+            WorkflowExecutionId executionId,
+            FlowForge.Core.Domain.Executions.NodeExecutionState nodeExecution,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<FlowForge.Core.Domain.Executions.WorkflowExecution?> GetExecutionAsync(
+            WorkflowExecutionId id,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FlowForge.Core.Domain.Executions.WorkflowExecution>>
+            FindExecutionsByCorrelationIdAsync(
+                ExecutionCorrelationId correlationId,
+                CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<FlowForge.Core.Domain.Executions.NodeExecutionState?> GetNodeExecutionAsync(
+            WorkflowExecutionId executionId,
+            NodeExecutionId nodeExecutionId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class TestPersistenceException : Exception;
 }
