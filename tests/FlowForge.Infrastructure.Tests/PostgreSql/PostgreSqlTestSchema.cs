@@ -36,12 +36,9 @@ internal sealed class PostgreSqlTestSchema : IAsyncDisposable
             await createSchema.ExecuteNonQueryAsync();
         }
 
-        var connectionStringBuilder =
-            new NpgsqlConnectionStringBuilder(_baseConnectionString)
-            {
-                SearchPath = _schemaName
-        };
-        _storeConnectionString = connectionStringBuilder.ConnectionString;
+        _storeConnectionString = PostgreSqlTestConnectionString.CreateSchemaScoped(
+            _baseConnectionString,
+            _schemaName);
 
         if (!_applyInitialSchema)
         {

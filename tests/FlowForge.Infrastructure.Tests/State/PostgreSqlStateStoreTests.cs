@@ -1,5 +1,6 @@
 using FlowForge.Abstractions.State;
 using FlowForge.Infrastructure.Persistence.PostgreSql;
+using FlowForge.Infrastructure.Tests.PostgreSql;
 using FlowForge.Infrastructure.Tests.State.Conformance;
 using Npgsql;
 
@@ -31,11 +32,9 @@ public sealed partial class PostgreSqlStateStoreTests : StateStoreConformanceTes
             await createSchema.ExecuteNonQueryAsync();
         }
 
-        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(_baseConnectionString)
-        {
-            SearchPath = _schemaName
-        };
-        _storeConnectionString = connectionStringBuilder.ConnectionString;
+        _storeConnectionString = PostgreSqlTestConnectionString.CreateSchemaScoped(
+            _baseConnectionString,
+            _schemaName);
 
         var schemaScriptPath = Path.Combine(
             AppContext.BaseDirectory,

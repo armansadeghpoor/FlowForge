@@ -2,6 +2,7 @@ using System.Text.Json;
 using FlowForge.Core.Domain.Definitions;
 using FlowForge.Core.Domain.Identifiers;
 using FlowForge.Infrastructure.Persistence.PostgreSql;
+using FlowForge.Infrastructure.Tests.PostgreSql;
 using Npgsql;
 
 namespace FlowForge.Infrastructure.Tests.Definitions;
@@ -32,11 +33,9 @@ public sealed class PostgreSqlWorkflowDefinitionStoreTests : IAsyncLifetime
             await createSchema.ExecuteNonQueryAsync();
         }
 
-        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(_baseConnectionString)
-        {
-            SearchPath = _schemaName
-        };
-        _storeConnectionString = connectionStringBuilder.ConnectionString;
+        _storeConnectionString = PostgreSqlTestConnectionString.CreateSchemaScoped(
+            _baseConnectionString,
+            _schemaName);
 
         var schemaScriptPath = Path.Combine(
             AppContext.BaseDirectory,

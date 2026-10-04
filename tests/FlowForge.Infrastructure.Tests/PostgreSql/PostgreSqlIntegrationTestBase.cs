@@ -29,11 +29,9 @@ public abstract class PostgreSqlIntegrationTestBase : IAsyncLifetime
             await createSchema.ExecuteNonQueryAsync();
         }
 
-        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(_baseConnectionString)
-        {
-            SearchPath = _schemaName
-        };
-        _storeConnectionString = connectionStringBuilder.ConnectionString;
+        _storeConnectionString = PostgreSqlTestConnectionString.CreateSchemaScoped(
+            _baseConnectionString,
+            _schemaName);
 
         var schemaScriptPath = Path.Combine(
             AppContext.BaseDirectory,
