@@ -91,23 +91,16 @@ public sealed class WorkflowExecutor
 
         try
         {
-            await _stateStore.CreateExecutionAsync(execution, cancellationToken);
+            await _stateStore.ExecuteLifecycleAsync(execution.Id, async (transaction, token) =>
+            {
+                await transaction.CreateExecutionAsync(execution, token);
+                await transaction.AppendExecutionHistoryAsync(CreateHistory(
+                    execution.Id, null, ExecutionHistoryEventType.WorkflowCreated, execution.CreatedAt, request), token);
+                await transaction.AppendExecutionHistoryAsync(CreateHistory(
+                    execution.Id, null, ExecutionHistoryEventType.WorkflowStarted, startedAt, request), token);
+            }, cancellationToken);
             executionCreated = true;
             _metrics.IncrementCounter(OperationalMetricNames.WorkflowExecutionsStarted);
-            await AppendHistoryAsync(
-                execution.Id,
-                null,
-                ExecutionHistoryEventType.WorkflowCreated,
-                execution.CreatedAt,
-                request,
-                cancellationToken);
-            await AppendHistoryAsync(
-                execution.Id,
-                null,
-                ExecutionHistoryEventType.WorkflowStarted,
-                startedAt,
-                request,
-                cancellationToken);
 
             var nodesById = workflow.Nodes.ToDictionary(node => node.Id);
             var nodeStates = new List<NodeExecutionState>();
@@ -193,18 +186,9 @@ public sealed class WorkflowExecutor
 
         try
         {
-            await _stateStore.SaveNodeExecutionAsync(
-                executionId,
-                nodeExecution,
-                cancellationToken);
+            await SaveNodeLifecycleAsync(executionId, nodeExecution,
+                ExecutionHistoryEventType.NodeStarted, startedAt, request, cancellationToken);
             nodeExecutionCreated = true;
-            await AppendHistoryAsync(
-                executionId,
-                nodeExecution.Id,
-                ExecutionHistoryEventType.NodeStarted,
-                startedAt,
-                request,
-                cancellationToken);
 
             var runner = _nodeRunnerRegistry.Get(node.Type);
             if (runner is null)
@@ -220,18 +204,9 @@ public sealed class WorkflowExecutor
                         Message = $"No node runner is registered for node type '{node.Type}'."
                     }
                 };
-                await _stateStore.SaveNodeExecutionAsync(
-                    executionId,
-                    failedNodeExecution,
-                    cancellationToken);
+                await SaveNodeLifecycleAsync(executionId, failedNodeExecution,
+                    ExecutionHistoryEventType.NodeFailed, missingRunnerCompletedAt, request, cancellationToken);
                 nodeExecution = failedNodeExecution;
-                await AppendHistoryAsync(
-                    executionId,
-                    nodeExecution.Id,
-                    ExecutionHistoryEventType.NodeFailed,
-                    missingRunnerCompletedAt,
-                    request,
-                    cancellationToken);
 
                 return nodeExecution;
             }
@@ -265,20 +240,10 @@ public sealed class WorkflowExecutor
                 Output = result.Output,
                 Failure = result.Failure
             };
-            await _stateStore.SaveNodeExecutionAsync(
-                executionId,
-                completedNodeExecution,
-                cancellationToken);
+            await SaveNodeLifecycleAsync(executionId, completedNodeExecution,
+                result.Success ? ExecutionHistoryEventType.NodeCompleted : ExecutionHistoryEventType.NodeFailed,
+                completedAt, request, cancellationToken);
             nodeExecution = completedNodeExecution;
-            await AppendHistoryAsync(
-                executionId,
-                nodeExecution.Id,
-                result.Success
-                    ? ExecutionHistoryEventType.NodeCompleted
-                    : ExecutionHistoryEventType.NodeFailed,
-                completedAt,
-                request,
-                cancellationToken);
 
             return nodeExecution;
         }
@@ -324,27 +289,14 @@ public sealed class WorkflowExecutor
         CancellationToken cancellationToken)
     {
         var completedAt = DateTime.UtcNow;
-        await _stateStore.UpdateWorkflowStatusAsync(
-            execution.Id,
-            status,
-            execution.StartedAt,
-            completedAt,
-            cancellationToken);
-        await AppendHistoryAsync(
-            execution.Id,
-            null,
+        await SaveWorkflowLifecycleAsync(execution, status,
             status switch
             {
-                WorkflowExecutionStatus.Succeeded =>
-                    ExecutionHistoryEventType.WorkflowCompleted,
-                WorkflowExecutionStatus.Failed =>
-                    ExecutionHistoryEventType.WorkflowFailed,
+                WorkflowExecutionStatus.Succeeded => ExecutionHistoryEventType.WorkflowCompleted,
+                WorkflowExecutionStatus.Failed => ExecutionHistoryEventType.WorkflowFailed,
                 _ => throw new InvalidOperationException(
                     $"Cannot record completion history for workflow status '{status}'.")
-            },
-            completedAt,
-            request,
-            cancellationToken);
+            }, completedAt, request, cancellationToken);
 
         _metrics.IncrementCounter(OperationalMetricNames.WorkflowExecutionsCompleted);
         _metrics.IncrementCounter(
@@ -380,17 +332,8 @@ public sealed class WorkflowExecutor
                 Message = "Node execution was cancelled by the caller."
             }
         };
-        await _stateStore.SaveNodeExecutionAsync(
-            executionId,
-            cancelledNodeExecution,
-            cancellationToken);
-        await AppendHistoryAsync(
-            executionId,
-            cancelledNodeExecution.Id,
-            ExecutionHistoryEventType.NodeCancelled,
-            completedAt,
-            request,
-            cancellationToken);
+        await SaveNodeLifecycleAsync(executionId, cancelledNodeExecution,
+            ExecutionHistoryEventType.NodeCancelled, completedAt, request, cancellationToken);
     }
 
     private async Task CancelWorkflowAsync(
@@ -400,19 +343,8 @@ public sealed class WorkflowExecutor
         CancellationToken cancellationToken)
     {
         var completedAt = DateTime.UtcNow;
-        await _stateStore.UpdateWorkflowStatusAsync(
-            execution.Id,
-            WorkflowExecutionStatus.Cancelled,
-            execution.StartedAt,
-            completedAt,
-            cancellationToken);
-        await AppendHistoryAsync(
-            execution.Id,
-            null,
-            ExecutionHistoryEventType.WorkflowCancelled,
-            completedAt,
-            request,
-            cancellationToken);
+        await SaveWorkflowLifecycleAsync(execution, WorkflowExecutionStatus.Cancelled,
+            ExecutionHistoryEventType.WorkflowCancelled, completedAt, request, cancellationToken);
 
         _metrics.IncrementCounter(OperationalMetricNames.WorkflowExecutionsCompleted);
         _metrics.RecordDuration(
@@ -420,26 +352,51 @@ public sealed class WorkflowExecutor
             Stopwatch.GetElapsedTime(metricStartedAt));
     }
 
-    private Task AppendHistoryAsync(
-        WorkflowExecutionId workflowExecutionId,
-        NodeExecutionId? nodeExecutionId,
+    private Task SaveNodeLifecycleAsync(
+        WorkflowExecutionId executionId,
+        NodeExecutionState nodeExecution,
         ExecutionHistoryEventType eventType,
         DateTime timestamp,
         WorkflowExecutionRequest request,
         CancellationToken cancellationToken) =>
-        _stateStore.AppendExecutionHistoryAsync(
-            new ExecutionHistoryEntry
+        _stateStore.ExecuteLifecycleAsync(executionId, async (transaction, token) =>
+        {
+            await transaction.SaveNodeExecutionAsync(nodeExecution, token);
+            await transaction.AppendExecutionHistoryAsync(
+                CreateHistory(executionId, nodeExecution.Id, eventType, timestamp, request), token);
+        }, cancellationToken);
+
+    private Task SaveWorkflowLifecycleAsync(
+        WorkflowExecution execution,
+        WorkflowExecutionStatus status,
+        ExecutionHistoryEventType eventType,
+        DateTime timestamp,
+        WorkflowExecutionRequest request,
+        CancellationToken cancellationToken) =>
+        _stateStore.ExecuteLifecycleAsync(execution.Id, async (transaction, token) =>
+        {
+            await transaction.UpdateWorkflowStatusAsync(status, execution.StartedAt, timestamp, token);
+            await transaction.AppendExecutionHistoryAsync(
+                CreateHistory(execution.Id, null, eventType, timestamp, request), token);
+        }, cancellationToken);
+
+    private static ExecutionHistoryEntry CreateHistory(
+        WorkflowExecutionId workflowExecutionId,
+        NodeExecutionId? nodeExecutionId,
+        ExecutionHistoryEventType eventType,
+        DateTime timestamp,
+        WorkflowExecutionRequest request) =>
+        new()
+        {
+            Id = new ExecutionHistoryId(Guid.NewGuid()),
+            WorkflowExecutionId = workflowExecutionId,
+            NodeExecutionId = nodeExecutionId,
+            EventType = eventType,
+            Timestamp = timestamp,
+            Metadata = JsonSerializer.SerializeToElement(new
             {
-                Id = new ExecutionHistoryId(Guid.NewGuid()),
-                WorkflowExecutionId = workflowExecutionId,
-                NodeExecutionId = nodeExecutionId,
-                EventType = eventType,
-                Timestamp = timestamp,
-                Metadata = JsonSerializer.SerializeToElement(new
-                {
-                    correlationId = request.CorrelationId.Value,
-                    executionRequestId = request.ExecutionRequestId.Value
-                })
-            },
-            cancellationToken);
+                correlationId = request.CorrelationId.Value,
+                executionRequestId = request.ExecutionRequestId.Value
+            })
+        };
 }

@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace FlowForge.Infrastructure.Tests.State;
 
-public sealed class PostgreSqlStateStoreTests : StateStoreConformanceTests, IAsyncLifetime
+public sealed partial class PostgreSqlStateStoreTests : StateStoreConformanceTests, IAsyncLifetime
 {
     private const string ConnectionStringEnvironmentVariable =
         "FLOWFORGE_POSTGRES_CONNECTION_STRING";

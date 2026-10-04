@@ -830,6 +830,65 @@ public sealed class WorkflowExecutorTests
         Assert.Equal(1, attempts);
     }
 
+    [Theory]
+    [InlineData(ExecutionHistoryEventType.WorkflowCreated)]
+    [InlineData(ExecutionHistoryEventType.WorkflowStarted)]
+    [InlineData(ExecutionHistoryEventType.NodeStarted)]
+    [InlineData(ExecutionHistoryEventType.NodeCompleted)]
+    [InlineData(ExecutionHistoryEventType.NodeFailed)]
+    [InlineData(ExecutionHistoryEventType.NodeCancelled)]
+    [InlineData(ExecutionHistoryEventType.WorkflowCompleted)]
+    [InlineData(ExecutionHistoryEventType.WorkflowFailed)]
+    [InlineData(ExecutionHistoryEventType.WorkflowCancelled)]
+    public async Task ExecuteAsync_HistoryWriteFails_RollsBackLifecycleAndPropagates(
+        ExecutionHistoryEventType failingEvent)
+    {
+        var expected = new TestPersistenceException();
+        var store = new FaultInjectingStateStore(
+            historyException: entry => entry.EventType == failingEvent ? expected : null);
+        using var source = new CancellationTokenSource();
+        var engine = CreateEngine(store, new FakeNodeRunner("test", (_, token) =>
+        {
+            if (failingEvent is ExecutionHistoryEventType.NodeCancelled or ExecutionHistoryEventType.WorkflowCancelled)
+            {
+                source.Cancel();
+                token.ThrowIfCancellationRequested();
+            }
+
+            return Task.FromResult(failingEvent is ExecutionHistoryEventType.NodeFailed or ExecutionHistoryEventType.WorkflowFailed
+                ? Failed("Expected node failure.", NodeFailureCategory.External) : Succeeded());
+        }));
+
+        var actual = await Assert.ThrowsAsync<TestPersistenceException>(() =>
+            engine.ExecuteAsync(Workflow([Node(1)]), source.Token));
+
+        Assert.Same(expected, actual);
+        var execution = await store.GetExecutionAsync(store.LastExecutionId, CancellationToken.None);
+        var history = await store.GetExecutionHistoryAsync(store.LastExecutionId, CancellationToken.None);
+        Assert.DoesNotContain(history, entry => entry.EventType == failingEvent);
+        if (failingEvent is ExecutionHistoryEventType.WorkflowCreated or ExecutionHistoryEventType.WorkflowStarted)
+        {
+            Assert.Null(execution);
+            Assert.Empty(history);
+        }
+        else
+        {
+            Assert.NotNull(execution);
+            Assert.Equal(WorkflowExecutionStatus.Running, execution.Status);
+            Assert.Null(execution.CompletedAt);
+            if (failingEvent == ExecutionHistoryEventType.NodeStarted)
+                Assert.Empty(execution.Nodes);
+            else if (failingEvent is ExecutionHistoryEventType.NodeCompleted or
+                     ExecutionHistoryEventType.NodeFailed or ExecutionHistoryEventType.NodeCancelled)
+            {
+                var node = Assert.Single(execution.Nodes);
+                Assert.Equal(NodeExecutionStatus.Running, node.Status);
+                Assert.Null(node.CompletedAt);
+                Assert.Null(node.Failure);
+            }
+        }
+    }
+
     private static WorkflowEngine CreateEngine(
         IStateStore stateStore,
         params INodeRunner[] runners) =>
@@ -942,9 +1001,46 @@ public sealed class WorkflowExecutorTests
     private sealed class FaultInjectingStateStore(
         Exception? createExecutionException = null,
         Func<NodeExecutionState, Exception?>? saveNodeException = null,
-        Func<WorkflowExecutionStatus, Exception?>? updateWorkflowException = null) : IStateStore
+        Func<WorkflowExecutionStatus, Exception?>? updateWorkflowException = null,
+        Func<ExecutionHistoryEntry, Exception?>? historyException = null) : IStateStore
     {
         private readonly InMemoryStateStore _inner = new();
+        public WorkflowExecutionId LastExecutionId { get; private set; }
+
+        public Task ExecuteLifecycleAsync(
+            WorkflowExecutionId executionId,
+            Func<IExecutionLifecycleTransaction, CancellationToken, Task> transition,
+            CancellationToken cancellationToken)
+        {
+            LastExecutionId = executionId;
+            return _inner.ExecuteLifecycleAsync(executionId, (transaction, token) =>
+                transition(new FaultInjectingTransaction(transaction, createExecutionException,
+                    saveNodeException, updateWorkflowException, historyException), token), cancellationToken);
+        }
+
+        private sealed class FaultInjectingTransaction(
+            IExecutionLifecycleTransaction inner,
+            Exception? createException,
+            Func<NodeExecutionState, Exception?>? nodeException,
+            Func<WorkflowExecutionStatus, Exception?>? workflowException,
+            Func<ExecutionHistoryEntry, Exception?>? historyException) : IExecutionLifecycleTransaction
+        {
+            public Task CreateExecutionAsync(WorkflowExecution execution, CancellationToken token) =>
+                createException is null ? inner.CreateExecutionAsync(execution, token) : Task.FromException(createException);
+
+            public Task SaveNodeExecutionAsync(NodeExecutionState node, CancellationToken token) =>
+                nodeException?.Invoke(node) is { } exception
+                    ? Task.FromException(exception) : inner.SaveNodeExecutionAsync(node, token);
+
+            public Task UpdateWorkflowStatusAsync(WorkflowExecutionStatus status, DateTime? startedAt,
+                DateTime? completedAt, CancellationToken token) =>
+                workflowException?.Invoke(status) is { } exception
+                    ? Task.FromException(exception) : inner.UpdateWorkflowStatusAsync(status, startedAt, completedAt, token);
+
+            public Task AppendExecutionHistoryAsync(ExecutionHistoryEntry entry, CancellationToken token) =>
+                historyException?.Invoke(entry) is { } exception
+                    ? Task.FromException(exception) : inner.AppendExecutionHistoryAsync(entry, token);
+        }
 
         public Task CreateExecutionAsync(
             WorkflowExecution execution,

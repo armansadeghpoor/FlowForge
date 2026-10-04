@@ -16,7 +16,7 @@ namespace FlowForge.Infrastructure.Persistence.PostgreSql;
 /// <summary>
 /// Stores workflow and node execution snapshots in PostgreSQL.
 /// </summary>
-public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
+public sealed partial class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
 {
     private const string InsertWorkflowSql =
         """
@@ -82,15 +82,22 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
     }
 
     /// <inheritdoc />
-    public async Task CreateExecutionAsync(
+    public Task CreateExecutionAsync(
         WorkflowExecution execution,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(execution);
+        return ExecuteLifecycleAsync(execution.Id,
+            (transaction, token) => transaction.CreateExecutionAsync(execution, token), cancellationToken);
+    }
 
-        await using var connection = _connectionFactory.CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+    private static async Task CreateExecutionCoreAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        WorkflowExecution execution,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(execution);
 
         try
         {
@@ -120,8 +127,6 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
                     transaction,
                     cancellationToken: cancellationToken));
             }
-
-            await transaction.CommitAsync(cancellationToken);
         }
         catch (PostgresException exception)
             when (exception.SqlState == PostgresErrorCodes.UniqueViolation &&
@@ -141,6 +146,20 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
         DateTime? completedAt,
         CancellationToken cancellationToken)
     {
+        await using var connection = _connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await UpdateWorkflowStatusCoreAsync(connection, null, id, status, startedAt, completedAt, cancellationToken);
+    }
+
+    private static async Task UpdateWorkflowStatusCoreAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        WorkflowExecutionId id,
+        WorkflowExecutionStatus status,
+        DateTime? startedAt,
+        DateTime? completedAt,
+        CancellationToken cancellationToken)
+    {
         const string sql =
             """
             UPDATE workflow_executions
@@ -150,8 +169,6 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
             WHERE id = @Id;
             """;
 
-        await using var connection = _connectionFactory.CreateConnection();
-        await connection.OpenAsync(cancellationToken);
         var affectedRows = await connection.ExecuteAsync(new CommandDefinition(
             sql,
             new
@@ -161,6 +178,7 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
                 StartedAt = ToDatabaseTimestamp(startedAt),
                 CompletedAt = ToDatabaseTimestamp(completedAt)
             },
+            transaction: transaction,
             cancellationToken: cancellationToken));
 
         if (affectedRows == 0)
@@ -397,9 +415,18 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entry);
-
         await using var connection = _connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        await AppendExecutionHistoryCoreAsync(connection, null, entry, cancellationToken);
+    }
+
+    private static async Task AppendExecutionHistoryCoreAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        ExecutionHistoryEntry entry,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
 
         try
         {
@@ -414,6 +441,7 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
                     Timestamp = ToDatabaseTimestamp(entry.Timestamp),
                     Metadata = entry.Metadata?.GetRawText()
                 },
+                transaction: transaction,
                 cancellationToken: cancellationToken));
         }
         catch (PostgresException exception)
@@ -456,7 +484,19 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
     }
 
     /// <inheritdoc />
-    public async Task SaveNodeExecutionAsync(
+    public Task SaveNodeExecutionAsync(
+        WorkflowExecutionId executionId,
+        NodeExecutionState nodeExecution,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(nodeExecution);
+        return ExecuteLifecycleAsync(executionId,
+            (transaction, token) => transaction.SaveNodeExecutionAsync(nodeExecution, token), cancellationToken);
+    }
+
+    private static async Task SaveNodeExecutionCoreAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
         WorkflowExecutionId executionId,
         NodeExecutionState nodeExecution,
         CancellationToken cancellationToken)
@@ -471,9 +511,6 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
             FOR KEY SHARE;
             """;
 
-        await using var connection = _connectionFactory.CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         var storedExecutionId = await connection.QuerySingleOrDefaultAsync<Guid?>(new CommandDefinition(
             findWorkflowSql,
             new { Id = executionId.Value },
@@ -491,7 +528,6 @@ public sealed class PostgreSqlStateStore : IStateStore, IExecutionSnapshotQuery
             CreateNodeParameters(executionId, nodeExecution),
             transaction,
             cancellationToken: cancellationToken));
-        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <inheritdoc />

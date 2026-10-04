@@ -5,7 +5,7 @@ using FlowForge.Infrastructure.Tests.State.Conformance;
 
 namespace FlowForge.Infrastructure.Tests.State;
 
-public sealed class InMemoryStateStoreTests : StateStoreConformanceTests
+public sealed partial class InMemoryStateStoreTests : StateStoreConformanceTests
 {
     protected override IStateStore CreateStore() => new InMemoryStateStore();
 

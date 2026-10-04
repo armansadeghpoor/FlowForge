@@ -10,7 +10,7 @@ using FlowForge.Core.Domain.Values;
 
 namespace FlowForge.Infrastructure.Tests.State.Conformance;
 
-public abstract class StateStoreConformanceTests
+public abstract partial class StateStoreConformanceTests
 {
     protected abstract IStateStore CreateStore();
 

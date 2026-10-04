@@ -130,9 +130,61 @@ the original `OperationCanceledException` is rethrown. Cancellation
 finalization uses a token independent from the already-cancelled caller token.
 
 Persistence failures remain outside execution classification and propagate to
-the caller, including failures during cancellation finalization. Atomic
-snapshot/history transitions remain deferred to Phase 14.4, so a persistence
-failure can still leave a partially applied node or workflow transition.
+the caller, including failures during cancellation finalization.
+
+### Atomic lifecycle persistence
+
+Phase 14.4 introduces `IStateStore.ExecuteLifecycleAsync` and its scoped,
+provider-independent `IExecutionLifecycleTransaction` write handle. Each callback
+contains only sequential, awaited persistence writes for one workflow execution.
+Handles must not escape the callback, exceptions must propagate, and callbacks
+must not invoke the parent store recursively. The Engine uses these scopes for:
+
+- Workflow creation together with `WorkflowCreated` and `WorkflowStarted`.
+- A running node snapshot together with `NodeStarted`.
+- A succeeded, failed, or cancelled node snapshot together with its corresponding
+  `NodeCompleted`, `NodeFailed`, or `NodeCancelled` event.
+- Workflow terminal status and timestamps together with `WorkflowCompleted`,
+  `WorkflowFailed`, or `WorkflowCancelled`.
+
+Retry attempt updates remain ordinary snapshot writes because they have no
+corresponding history event. Existing standalone state/history methods remain
+available; calling them separately does not provide a combined atomic transition.
+Custom `IStateStore` providers must implement the new atomic callback contract;
+there is no non-atomic default implementation.
+
+PostgreSQL opens one connection and one transaction per lifecycle callback. Every
+participating Dapper command uses that same connection and transaction. Commit
+occurs only after the callback succeeds; a write or callback failure rolls back
+the transaction. Rollback uses an independent cancellation token and cannot
+replace the original failure. No schema or migration changes are required.
+History retains its existing ordering by timestamp and database append sequence;
+rolled-back inserts can leave harmless sequence gaps.
+
+The in-memory provider stages state and history in a private snapshot and publishes
+the complete pair with one reference assignment only after success. A semaphore
+per execution serializes writes to that execution, including standalone writes,
+without blocking unrelated executions. Reads see committed snapshots. Failed or
+cancelled callbacks publish nothing. History retains timestamp order with stable
+append order for ties. Two separate read calls may straddle a commit in either
+provider; they are not a combined transactional read API.
+
+Transactions are scoped to persistence transitions, never entire workflows.
+No transaction spans node execution, HTTP calls, delays, retries, or waiting for
+concurrent siblings. The existing `Task.WhenAll` behavior remains intact. Caller
+cancellation cleanup uses the existing independent token, so each cancellation
+snapshot and history event can commit together before cancellation is rethrown.
+If cleanup persistence fails, the original persistence failure propagates.
+
+Atomicity does not guarantee eventual finalization: a failed terminal transition
+leaves the previous committed state/history pair, which can still be `Running`.
+Independent siblings and earlier transitions stay committed. Connection loss
+during commit can leave its acknowledgement uncertain even though the database
+transition itself is atomic. No automatic retry or recovery is introduced.
+
+For Phase 14.5 planning, unresolved responsibilities include reconciling interrupted
+executions and uncertain commit outcomes, and any recovery/idempotency policy for
+external node effects. Phase 14.4 does not define or implement that later scope.
 
 ## Trigger Runtime Architecture
 

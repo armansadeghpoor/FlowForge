@@ -11,6 +11,20 @@ namespace FlowForge.Abstractions.State;
 public interface IStateStore
 {
     /// <summary>
+    /// Commits all writes in a single lifecycle transition atomically. Failed callbacks
+    /// roll back their writes; commit errors propagate (connection loss may leave the
+    /// commit acknowledgement uncertain). The callback is invoked once and must contain
+    /// only awaited persistence operations using its supplied transaction handle.
+    /// Do not call this store recursively or execute node behavior inside the callback.
+    /// Persistence failures propagate to the caller. Separate reads are not a combined
+    /// state/history snapshot and may straddle a committed transition.
+    /// </summary>
+    Task ExecuteLifecycleAsync(
+        WorkflowExecutionId executionId,
+        Func<IExecutionLifecycleTransaction, CancellationToken, Task> transition,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Creates a workflow execution snapshot, including its supplied node states.
     /// Existing executions are never overwritten.
     /// </summary>
